@@ -149,11 +149,12 @@ def main():
                     escape_ticks = 0
 
                 # ── Phase avant forcée post-recul ─────────────────────
-                # Après le recul, on avance avec le braquage escape_angle
-                # pour s'éloigner du mur et partir du bon côté.
+                # Après le recul, on avance avec l'angle INVERSE pour se recentrer dans la piste
+                # sans refaire le même mur.
                 if escape_ticks > 0:
-                    print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ESCAPE {escape_ticks} {escape_angle:+.0f}°")
-                    act.set_direction(escape_angle)
+                    escape_forward_angle = -escape_angle
+                    print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ESCAPE {escape_ticks} {escape_forward_angle:+.0f}°")
+                    act.set_direction(escape_forward_angle)
                     act.set_vitesse(config.VITESSE_MIN)
                 else:
                     angle = compute_ftg(scan, config.D_MIN_MM, config.W_MIN_PTS, config.K_FTG,
@@ -197,12 +198,12 @@ def main():
                     right_d = min(right_sector) if right_sector else 100
 
                     if left_d > right_d:
-                        # Si la gauche est plus libre, on braque à droite en reculant
-                        # pour que le nez de la voiture pivote bien vers la gauche.
-                        escape_angle = config.STEER_ANGLE_MAX_DEG
+                        # Si l'obstacle est principalement à droite, pour se redresser lors d'un virage:
+                        # On braque vers l'obstacle (à droite) en reculant 
+                        # pour éloigner l'avant du mur
+                        escape_angle = config.STEER_ANGLE_MAX_DEG  
                     else:
-                        # Inversement, on braque à gauche en reculant pour s'orienter à droite.
-                        escape_angle = -config.STEER_ANGLE_MAX_DEG
+                        escape_angle = -config.STEER_ANGLE_MAX_DEG  
 
                     print(f"[RECUL] Bloqué → recul {config.T_REVERSE_S}s braquage {escape_angle:+.0f}°")
                     # Braquer AVANT de reculer → servo tourne pendant tout le recul.
