@@ -29,7 +29,7 @@ ESC_DUTY_NEUTRAL = 7.78
 # Valeurs de départ pour le reverse (à affiner)
 ESC_DUTY_REV_START  = 7.20   # Duty d'engagement reverse (doit être < neutral)
 ESC_DUTY_REV_STABLE = 6.70   # Duty de recul stable
-T_REVERSE_S         = 0.4    # Durée du recul stable (secondes)
+T_REVERSE_S         = 0.4    # Durée du recul stable (secondes). Plus court pour la sécurité en calibration (vs config.py 1.0)
 REVERSE_ENGAGE_S    = 0.1    # Durée d'engagement (secondes)
 
 STEP = 0.02
@@ -46,25 +46,39 @@ def afficher(rev_start, rev_stable):
 def sequence_reverse(pwm, rev_start, rev_stable, neutral):
     """
     Exécute la séquence reverse avec time.sleep(0.01) pour céder le CPU.
-    1. REV_START pendant REVERSE_ENGAGE_S
-    2. REV_STABLE pendant T_REVERSE_S
-    3. Retour au neutral
+    1. Frein (REV_START) pendant REVERSE_ENGAGE_S
+    2. Retour au neutral pendant REVERSE_ENGAGE_S
+    3. Engager reverse (REV_START) pendant REVERSE_ENGAGE_S
+    4. Recul stable (REV_STABLE) pendant T_REVERSE_S
+    5. Retour au neutral
     """
     print("\n  → Séquence reverse en cours...", flush=True)
 
-    # Phase 1 : engagement reverse
+    # Phase 1 : Frein (brake)
     pwm.change_duty_cycle(rev_start)
     t0 = time.monotonic()
     while time.monotonic() - t0 < REVERSE_ENGAGE_S:
         time.sleep(0.01)
 
-    # Phase 2 : recul stable
+    # Phase 2 : Retour neutral
+    pwm.change_duty_cycle(neutral)
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < REVERSE_ENGAGE_S:
+        time.sleep(0.01)
+
+    # Phase 3 : Reverse engagé (double-tap)
+    pwm.change_duty_cycle(rev_start)
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < REVERSE_ENGAGE_S:
+        time.sleep(0.01)
+
+    # Phase 4 : Recul stable
     pwm.change_duty_cycle(rev_stable)
     t0 = time.monotonic()
     while time.monotonic() - t0 < T_REVERSE_S:
         time.sleep(0.01)
 
-    # Phase 3 : retour neutral
+    # Phase 5 : Retour neutral
     pwm.change_duty_cycle(neutral)
     print("  → Retour neutral.", flush=True)
 

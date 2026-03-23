@@ -6,9 +6,9 @@ import time
 import config
 from steering import angle_deg_to_duty, clamp
 
-sonar = None
+sonar_module = None
 if getattr(config, "SONAR_ACTIF", False):
-    import sonar
+    import sonar as sonar_module
 
 
 class Actuators:
@@ -76,8 +76,8 @@ class Actuators:
         t0 = time.monotonic()
 
         while time.monotonic() - t0 < duree_s:
-            if sonar:
-                dist = sonar.get_sonar_arriere()
+            if sonar_module:
+                dist = sonar_module.get_sonar_arriere()
                 if dist is not None and dist < config.SONAR_ARRIERE_SEUIL_CM:
                     break
             time.sleep(0.02)
@@ -88,7 +88,21 @@ class Actuators:
     def stop(self):
         # Ordre : 1) recentrer le servo (évite de garder un braquage résiduel),
         # 2) couper la propulsion (neutral), 3) arrêter les signaux PWM.
-        self.set_direction(0)
-        self.pwm_prop.change_duty_cycle(config.ESC_DUTY_NEUTRAL)
-        self.pwm_dir.stop()
-        self.pwm_prop.stop()
+        # Enveloppe chaque étape dans un try/except pour éviter qu'une erreur
+        # sur le servo (ex: sysfs disparu) n'empêche de couper la propulsion.
+        try:
+            self.set_direction(0)
+        except Exception:
+            pass
+        try:
+            self.pwm_prop.change_duty_cycle(config.ESC_DUTY_NEUTRAL)
+        except Exception:
+            pass
+        try:
+            self.pwm_dir.stop()
+        except Exception:
+            pass
+        try:
+            self.pwm_prop.stop()
+        except Exception:
+            pass

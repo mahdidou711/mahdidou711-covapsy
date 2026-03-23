@@ -24,9 +24,9 @@ from lidar_consumer import LidarConsumer
 from actuators import Actuators
 from ftg import compute_ftg, detect_collision
 
-sonar = None
+sonar_module = None
 if getattr(config, "SONAR_ACTIF", False):
-    import sonar
+    import sonar as sonar_module
 
 
 def main():
@@ -38,9 +38,9 @@ def main():
     stop_event = threading.Event()
     lidar.start()
 
-    if sonar:
+    if sonar_module:
         t_sonar = threading.Thread(
-            target=sonar.sonar_thread_func,
+            target=sonar_module.sonar_thread_func,
             args=(stop_event,),
             daemon=True
         )
@@ -53,9 +53,6 @@ def main():
     # que le moteur reste alimenté ou que le servo reste braqué.
     def shutdown(signum, frame):
         stop_event.set()
-        act.stop()
-        lidar.stop()
-        sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
@@ -112,11 +109,15 @@ def main():
             else:
                 ticks_sans_scan = 0
 
+            # Décrémenter les ticks d'échappement indépendamment du lidar
+            if escape_ticks > 0:
+                escape_ticks -= 1
+
             if fresh and scan is not None:
 
                 # Distance frontale minimale (secteur ±COLLISION_SECTOR_DEG).
                 front_min = None
-                for i in list(range(0, config.COLLISION_SECTOR_DEG)) + \
+                for i in list(range(0, config.COLLISION_SECTOR_DEG + 1)) + \
                          list(range(360 - config.COLLISION_SECTOR_DEG, 360)):
                     d = scan[i]
                     if d > 0 and (front_min is None or d < front_min):
@@ -125,6 +126,7 @@ def main():
                 # Bug fix : si front_min=None (av=0, lidar ne mesure rien
                 # devant = trop proche), vérifier les murs latéraux via un secteur
                 # au lieu d'un simple point (plus robuste au bruit).
+                front_blocked = False
                 if front_min is None:
                     left_sector = [scan[i] for i in range(85, 96) if scan[i] > 0]
                     right_sector = [scan[i] for i in range(265, 276) if scan[i] > 0]
@@ -133,29 +135,36 @@ def main():
                     right_d = min(right_sector) if right_sector else 100
 
                     if left_d < 1000 or right_d < 1000:
-                        front_min = 100  # Forcer "très proche"
+                        front_blocked = True
 
                 # Détection d'état prolongé sans vision frontale utile
-                if front_min == 100:
+                if front_blocked:
                     stuck_av_zero += 1
                 else:
                     stuck_av_zero = 0
+
+                # Check de collision critique pendant escape
+                if escape_ticks > 0 and (front_blocked or (front_min is not None and front_min < config.STUCK_DIST_MM)):
+                    print(f"[SECURITE] Mur frontal ({front_min}mm) détecté pendant escape -> annulation escape.")
+                    escape_ticks = 0
 
                 # ── Phase avant forcée post-recul ─────────────────────
                 # Après le recul, on avance avec le braquage escape_angle
                 # pour s'éloigner du mur et partir du bon côté.
                 if escape_ticks > 0:
-                    escape_ticks -= 1
                     print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ESCAPE {escape_ticks} {escape_angle:+.0f}°")
                     act.set_direction(escape_angle)
                     act.set_vitesse(config.VITESSE_MIN)
                 else:
-                    angle = compute_ftg(scan, config.D_MIN_MM, config.W_MIN_DEG, config.K_FTG,
+                    angle = compute_ftg(scan, config.D_MIN_MM, config.W_MIN_PTS, config.K_FTG,
                                         sector_deg=config.FTG_SECTOR_DEG,
                                         steer_limit_deg=config.STEER_ANGLE_MAX_DEG)
 
                     # Vitesse proportionnelle à la distance frontale.
-                    if front_min is not None and front_min < config.D_MIN_MM:
+                    if front_blocked:
+                        vitesse = config.VITESSE_MIN
+                        print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | BLOCKED v={vitesse:.2f}")
+                    elif front_min is not None and front_min < config.D_MIN_MM:
                         ratio = max(0.0, (front_min - config.COLLISION_DIST_MM)) / \
                                 (config.D_MIN_MM - config.COLLISION_DIST_MM)
                         ratio = min(1.0, max(0.0, ratio))

@@ -80,7 +80,7 @@ D_MIN_MM = 1500              # Distance de sécurité (mm). Tout point < D_MIN_M
                              # Augmenter → plus prudent, gaps plus petits.
                              # Diminuer → prend plus de risques, gaps plus grands.
 
-W_MIN_DEG = 20               # Largeur angulaire minimale d'un gap valide (degrés).
+W_MIN_PTS = 20               # Largeur spatiale minimale d'un gap valide (points/degrés physiques du lidar).
                              # Plage : 10–40.
                              # Augmenter → ignore les petits gaps (plus sûr).
                              # Diminuer → accepte des passages étroits.
@@ -134,7 +134,7 @@ VITESSE_MAX_MS = 2.0         # Limite logicielle absolue. Ne pas dépasser.
 
 STUCK_DIST_MM = 400          # Distance frontale (mm) en dessous de laquelle on
                              # incrémente le compteur de blocage.
-                             # Plage : 200–600.
+                             # Plage : 200–800.
 
 STUCK_TICKS = 25             # Nombre de ticks consécutifs avant de déclencher
                              # la manœuvre de recul. À 50 Hz, 25 = 0.5 s.

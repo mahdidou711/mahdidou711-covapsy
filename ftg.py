@@ -23,7 +23,7 @@ def _clamp(x: float, lo: float, hi: float) -> float:
 def compute_ftg(
     scan: list,
     d_min_mm: float,
-    w_min_deg: int,
+    w_min_pts: int,
     k_ftg: float,
     sector_deg: int = None,
     steer_limit_deg: float = 18.0,
@@ -34,7 +34,7 @@ def compute_ftg(
     Paramètres :
         scan            : liste 360 entiers mm (convention ci-dessus)
         d_min_mm        : distance de sécurité en mm
-        w_min_deg       : largeur minimale d'un gap valide en degrés
+        w_min_pts       : largeur minimale d'un gap valide en nombre de points
         k_ftg           : gain angulaire (angle_cmd = k_ftg × angle_gap)
         sector_deg      : demi-angle de la zone avant analysée (défaut 150°)
         steer_limit_deg : angle maximal de braquage en degrés (défaut 18.0°)
@@ -59,15 +59,15 @@ def compute_ftg(
     # ── ÉTAPE 1 — Extraire la zone avant ──────────────────────────────
     # On veut les indices autour de 0 (avant), soit :
     #   droite : scan[360-sector_deg : 360]  → ex. indices 260–359
-    #   avant  : scan[0 : sector_deg]        → ex. indices 0–99
+    #   avant  : scan[0 : sector_deg + 1]    → ex. indices 0–100
     # On concatène droite PUIS avant pour obtenir une liste contiguë
     # qui va de la droite lointaine (260) vers l'avant (0) puis vers
-    # la gauche lointaine (99), sans discontinuité au passage par 0.
+    # la gauche lointaine (100), sans discontinuité au passage par 0.
     points = []
     for i in range(360 - sector_deg, 360):
         if scan[i] != 0:
             points.append((i, scan[i]))
-    for i in range(0, sector_deg):
+    for i in range(0, sector_deg + 1):
         if scan[i] != 0:
             points.append((i, scan[i]))
 
@@ -82,18 +82,35 @@ def compute_ftg(
     # ── ÉTAPE 3 — Trouver les gaps ────────────────────────────────────
     # Un gap est une séquence contiguë de points libres dans la liste
     # "points". "Contigu" signifie que les points se suivent dans l'ordre
-    # de parcours (pas de point occupé entre eux). On parcourt "points"
-    # et on regroupe les passages libres consécutifs.
+    # de parcours, MAIS ne doivent pas être séparés par de trop grands
+    # espaces sans mesure (ex: > 3°).
+    GAP_MAX_IDX_JUMP = 3
     gaps = []
     current_gap = []
+    last_idx_unwrapped = None
+
     for idx, dist in points:
+        # On calcule une position linéaire continue pour gérer le rebouclage
+        # Les points sont ordonnés de 360-sector_deg vers 360, puis de 0 vers sector_deg
+        linear_idx = idx if idx >= 180 else idx + 360
+        
         if dist >= d_min_mm:
+            # Si le dernier point du gap courant est trop loin numériquement (saut de >3°)
+            # Cela veut dire qu'il y a des zéros au milieu qu'on a sautés. On coupe le gap.
+            if current_gap and last_idx_unwrapped is not None and (linear_idx - last_idx_unwrapped > GAP_MAX_IDX_JUMP):
+                if len(current_gap) >= w_min_pts:
+                    gaps.append(current_gap)
+                current_gap = []
+            
             current_gap.append((idx, dist))
+            last_idx_unwrapped = linear_idx
         else:
-            if len(current_gap) >= w_min_deg:
+            if len(current_gap) >= w_min_pts:
                 gaps.append(current_gap)
             current_gap = []
-    if len(current_gap) >= w_min_deg:
+            last_idx_unwrapped = None
+
+    if len(current_gap) >= w_min_pts:
         gaps.append(current_gap)
 
     # ── ÉTAPE 4 — Sélectionner le meilleur gap ───────────────────────
@@ -101,23 +118,28 @@ def compute_ftg(
     # plus profond (le plus sûr). En cas d'égalité, le plus large gagne
     # (plus de marge de manœuvre).
     if not gaps:
-        return 0.0
+        if not points:
+            return 0.0
+        # Fallback de survie si TOUT est bloqué : braquer vers
+        # le point le moins proche plutôt que de foncer tout droit
+        best_point = max(points, key=lambda p: p[1])
+        center_idx = best_point[0]
+    else:
+        best_gap = None
+        best_avg = -1.0
+        best_len = 0
+        for gap in gaps:
+            avg = sum(d for _, d in gap) / len(gap)
+            if avg > best_avg or (avg == best_avg and len(gap) > best_len):
+                best_avg = avg
+                best_len = len(gap)
+                best_gap = gap
 
-    best_gap = None
-    best_avg = -1.0
-    best_len = 0
-    for gap in gaps:
-        avg = sum(d for _, d in gap) / len(gap)
-        if avg > best_avg or (avg == best_avg and len(gap) > best_len):
-            best_avg = avg
-            best_len = len(gap)
-            best_gap = gap
-
-    # ── ÉTAPE 5 — Calculer l'angle cible ─────────────────────────────
-    # Prendre le point central du meilleur gap et récupérer son indice
-    # original dans scan (0–359).
-    mid = len(best_gap) // 2
-    center_idx = best_gap[mid][0]
+        # ── ÉTAPE 5 — Calculer l'angle cible ─────────────────────────────
+        # Prendre le point central du meilleur gap et récupérer son indice
+        # original dans scan (0–359).
+        mid = len(best_gap) // 2
+        center_idx = best_gap[mid][0]
 
     # Conversion indice → angle physique :
     #   indice 0   → angle_brut = 0    → angle_physique = 0°    (avant)

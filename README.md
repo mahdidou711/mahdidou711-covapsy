@@ -68,7 +68,7 @@
 Reactive navigation at 50 Hz:
 1. Extract the forward lidar sector (`±FTG_SECTOR_DEG` around front)
 2. Threshold: points below `D_MIN_MM` are treated as obstacles (gap closed)
-3. Find contiguous free sequences of at least `W_MIN_DEG` points
+3. Find contiguous free sequences of at least `W_MIN_PTS` points
 4. Select the best gap: highest average depth; tie-break by gap width
 5. Steer toward the gap center with gain `K_FTG`, clamped to `±STEER_ANGLE_MAX_DEG`
 6. Speed proportionally reduced when `front_min < D_MIN_MM`, down to `VITESSE_MIN` at `COLLISION_DIST_MM`
@@ -77,7 +77,7 @@ Reactive navigation at 50 Hz:
 
 **Trigger 1 — counter**: `front_min < STUCK_DIST_MM` for `STUCK_TICKS` consecutive ticks (25 = 0.5 s at 50 Hz)
 
-**Trigger 2 — zero front**: `scan[0] == 0` (too close to measure) AND lateral walls both < 1000 mm for `STUCK_AV_ZERO_TICKS` ticks (15 = 0.3 s) — handles the case where the car is wedged so close to a wall that the lidar returns no front measurement
+**Trigger 2 — zero front**: all front sector measurements are 0 (too close to measure) AND at least one lateral wall < 1000 mm for `STUCK_AV_ZERO_TICKS` ticks (15 = 0.3 s) — handles the case where the car is wedged so close to a wall that the lidar returns no front measurement
 
 ### Reverse / Escape sequence
 
@@ -170,7 +170,7 @@ All tuning parameters are centralized in `config.py`. **This is the only file to
 | Parameter | Default | Description |
 |---|---|---|
 | `D_MIN_MM` | 1500 mm | Safety bubble radius — increase = more conservative |
-| `W_MIN_DEG` | 20° | Minimum angular width of a valid gap |
+| `W_MIN_PTS` | 20 points | Minimum width of a valid gap |
 | `K_FTG` | 1.0 | Steering gain — increase = more aggressive turns |
 | `FTG_SECTOR_DEG` | 150° | Half-angle of the forward lidar sector analysed by FTG |
 
