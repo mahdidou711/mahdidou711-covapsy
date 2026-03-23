@@ -197,9 +197,12 @@ def main():
                     right_d = min(right_sector) if right_sector else 100
 
                     if left_d > right_d:
-                        escape_angle = -config.STEER_ANGLE_MAX_DEG  # gauche
+                        # Si la gauche est plus libre, on braque à droite en reculant
+                        # pour que le nez de la voiture pivote bien vers la gauche.
+                        escape_angle = config.STEER_ANGLE_MAX_DEG
                     else:
-                        escape_angle = config.STEER_ANGLE_MAX_DEG   # droite
+                        # Inversement, on braque à gauche en reculant pour s'orienter à droite.
+                        escape_angle = -config.STEER_ANGLE_MAX_DEG
 
                     print(f"[RECUL] Bloqué → recul {config.T_REVERSE_S}s braquage {escape_angle:+.0f}°")
                     # Braquer AVANT de reculer → servo tourne pendant tout le recul.

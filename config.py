@@ -136,9 +136,9 @@ STUCK_DIST_MM = 400          # Distance frontale (mm) en dessous de laquelle on
                              # incrémente le compteur de blocage.
                              # Plage : 200–800.
 
-STUCK_TICKS = 25             # Nombre de ticks consécutifs avant de déclencher
-                             # la manœuvre de recul. À 50 Hz, 25 = 0.5 s.
-                             # Plage : 15–50.
+STUCK_TICKS = 12             # Nombre de ticks consécutifs avant de déclencher
+                             # la manœuvre de recul. À 50 Hz, 12 = ~0.25 s.
+                             # Plage : 10–50.
 
 STUCK_AV_ZERO_TICKS = 15    # Nombre de ticks consécutifs avec av=0 (pas de
                              # mesure devant) ET murs latéraux proches → bloqué.
