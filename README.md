@@ -68,9 +68,9 @@
 Reactive navigation at 50 Hz:
 1. Extract the forward lidar sector (`±FTG_SECTOR_DEG` around front)
 2. Threshold: points below `D_MIN_MM` are treated as obstacles (gap closed)
-3. Find contiguous free sequences of at least `W_MIN_PTS` points
+3. Find contiguous free sequences of at least `W_MIN_PTS` points. Sequences separated by blindspots (0 distance values) of more than 3 indices are split (`GAP_MAX_IDX_JUMP`).
 4. Select the best gap: highest average depth; tie-break by gap width
-5. Steer toward the gap center with gain `K_FTG`, clamped to `±STEER_ANGLE_MAX_DEG`
+5. Steer toward the gap center with gain `K_FTG`, clamped to `±STEER_ANGLE_MAX_DEG`. If no gaps exist, fallback is dynamically steering towards the deepest measured single point.
 6. Speed proportionally reduced when `front_min < D_MIN_MM`, down to `VITESSE_MIN` at `COLLISION_DIST_MM`
 
 ### Stuck detection — two triggers
@@ -93,6 +93,7 @@ stuck detected
          (interrupted early if rear sonar < SONAR_ARRIERE_SEUIL_CM)
       5. duty → NEUTRAL
   → escape phase: drive forward with same steering for ESCAPE_TICKS ticks (40 = 0.8 s)
+     (interrupted early if front_min < STUCK_DIST_MM to prevent blind re-crashing)
   → cooldown: ESCAPE_COOLDOWN_TICKS ticks (50 = 1.0 s) before stuck detection resumes
 ```
 
@@ -185,7 +186,7 @@ All tuning parameters are centralized in `config.py`. **This is the only file to
 
 | Parameter | Default | Description |
 |---|---|---|
-| `STUCK_DIST_MM` | 400 mm | Front distance threshold to increment stuck counter |
+| `STUCK_DIST_MM` | 400 mm | Front distance threshold to increment stuck counter (also interrupts escape phase to prevent crashing) |
 | `STUCK_TICKS` | 25 (0.5 s) | Consecutive ticks below threshold to trigger reverse |
 | `STUCK_AV_ZERO_TICKS` | 15 (0.3 s) | Ticks with no front measurement + lateral walls close → stuck |
 | `T_REVERSE_S` | 1.0 s | Max reverse duration (can be cut short by rear sonar) |
