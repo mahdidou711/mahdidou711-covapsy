@@ -81,14 +81,14 @@ try:
 
         # Collision urgence : secteur avant ±COLLISION_SECTOR_DEG
         coll_idx = list(range(360 - cfg.COLLISION_SECTOR_DEG, 360)) + \
-                   list(range(0, cfg.COLLISION_SECTOR_DEG))
+                   list(range(0, cfg.COLLISION_SECTOR_DEG + 1))
         coll_dist = min_sector(scan, coll_idx)
         collision = coll_dist > 0 and coll_dist < cfg.COLLISION_DIST_MM
 
         print("\033[H\033[J", end="")  # clear terminal
         print("=== Calibrage Lidar — RPLidar A2M12 ===")
         print(f"Taux de scan : {rate:.1f} tours/s  (fenêtre {cfg.LIDAR_RATE_WIN_S}s)")
-        print(f"Âge scan     : {age_s*1000:.0f} ms  "
+        print(f"Âge scan     : {age_s * 1000:.0f} ms  "
               f"{'[FRAIS]' if fresh else '[TROP VIEUX — augmenter LIDAR_FRESH_MAX_S]'}")
         print(f"Scan ID      : {scan_id}")
         print()
