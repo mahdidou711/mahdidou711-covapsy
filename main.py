@@ -199,11 +199,11 @@ def main():
 
                     if left_d > right_d:
                         # Si l'obstacle est principalement à droite, pour se redresser lors d'un virage:
-                        # On braque vers l'obstacle (à droite) en reculant 
+                        # On braque vers l'obstacle (à droite) en reculant
                         # pour éloigner l'avant du mur
-                        escape_angle = config.STEER_ANGLE_MAX_DEG  
+                        escape_angle = config.STEER_ANGLE_MAX_DEG
                     else:
-                        escape_angle = -config.STEER_ANGLE_MAX_DEG  
+                        escape_angle = -config.STEER_ANGLE_MAX_DEG
 
                     print(f"[RECUL] Bloqué → recul {config.T_REVERSE_S}s braquage {escape_angle:+.0f}°")
                     # Braquer AVANT de reculer → servo tourne pendant tout le recul.
