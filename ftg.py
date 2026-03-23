@@ -176,9 +176,9 @@ def detect_collision(scan: list, seuil_mm: float, sector_deg: int = 30) -> bool:
     Retourne True si min(distances valides) < seuil_mm.
     Retourne False si aucune mesure valide dans le secteur.
     """
-    # Secteur avant : scan[0:sector_deg] + scan[360-sector_deg:360]
+    # Secteur avant : scan[0:sector_deg+1] + scan[360-sector_deg:360]
     min_dist = None
-    for i in list(range(0, sector_deg)) + list(range(360 - sector_deg, 360)):
+    for i in list(range(0, sector_deg + 1)) + list(range(360 - sector_deg, 360)):
         d = scan[i]
         # Ignorer 0 = absence de mesure (pas un obstacle).
         if d == 0:
