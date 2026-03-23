@@ -190,23 +190,6 @@ def main():
                     stuck_count = max(0, stuck_count - 1)  # Décroissance douce (hystérésis)
 
                 if stuck_count >= config.STUCK_TICKS or stuck_av_zero >= config.STUCK_AV_ZERO_TICKS:
-                    # Capture de la distance frontale avant de commencer le recul
-                    initial_front = front_min if front_min is not None else 0
-
-                    def check_lidar_distance_escaped() -> bool:
-                        # Lit le flux Lidar pendant le recul bloquant
-                        _, _, _, current_scan, _ = consumer.poll()
-                        if current_scan is None:
-                            return False
-                        f_dist = [d for d in current_scan[345:] + current_scan[:15] if d > 0]
-                        if not f_dist:
-                            return False
-                        current_front = min(f_dist)
-                        # Si l'avant s'est éloigné du mur de la distance demandée
-                        if (current_front - initial_front) > getattr(config, "ESCAPE_REVERSE_DIST_MM", 300):
-                            return True
-                        return False
-
                     # Choisir le côté le plus dégagé pour le braquage EN RECULANT.
                     # On utilise à nouveau le min sur secteurs pour plus de robustesse.
                     left_sector = [scan[i] for i in range(85, 96) if scan[i] > 0]
@@ -225,7 +208,7 @@ def main():
                     print(f"[RECUL] Bloqué → recul {config.T_REVERSE_S}s braquage {escape_angle:+.0f}°")
                     # Braquer AVANT de reculer → servo tourne pendant tout le recul.
                     act.set_vitesse(0)
-                    act.reculer(config.T_REVERSE_S, force_angle_deg=escape_angle, callback_stop=check_lidar_distance_escaped)
+                    act.reculer(config.T_REVERSE_S, force_angle_deg=escape_angle)
 
                     # Phase avant forcée avec même braquage
                     escape_ticks = config.ESCAPE_TICKS

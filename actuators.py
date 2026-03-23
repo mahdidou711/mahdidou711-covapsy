@@ -52,7 +52,7 @@ class Actuators:
             dc = config.ESC_DUTY_NEUTRAL + dead + ratio * delta_max
         self.pwm_prop.change_duty_cycle(clamp(dc, config.DUTY_MIN_CLAMP, config.DUTY_MAX_CLAMP))
 
-    def reculer(self, duree_s: float = None, force_angle_deg: float = None, callback_stop=None):
+    def reculer(self, duree_s: float = None, force_angle_deg: float = None):
         # duree_s par défaut = config.T_REVERSE_S.
         if duree_s is None:
             duree_s = config.T_REVERSE_S
@@ -81,10 +81,6 @@ class Actuators:
         t0 = time.monotonic()
 
         while time.monotonic() - t0 < duree_s:
-            if callback_stop and callback_stop():
-                print("[RECUL] Distance suffisante atteinte (Lidar), arrêt !")
-                break
-
             if sonar_module:
                 dist = sonar_module.get_sonar_arriere()
                 if dist is not None and dist < getattr(config, "SONAR_ARRIERE_SEUIL_CM", 30):

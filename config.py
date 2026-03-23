@@ -53,8 +53,8 @@ ESC_DUTY_FWD_START = 7.88   # Seuil minimal de marche avant. Calibré terrain : 
 # Utilisé par actuators.reculer() lors de la manœuvre anti-blocage.
 
 ESC_DUTY_REV_START  = 7.20  # Duty pour engager le reverse.
-ESC_DUTY_REV_STABLE = 7.00  # Duty pour reculer stable (réduit pour éviter les gros chocs).
-T_REVERSE_S = 1.0            # Durée maximale du recul en secondes.
+ESC_DUTY_REV_STABLE = 7.00  # Duty pour reculer stable.
+T_REVERSE_S = 1.0            # Durée du recul en secondes.
 REVERSE_ENGAGE_S = 0.10      # Temps entre chaque étape de la séquence reverse (s).
 
 # -----------------------------------------------------------------------------
@@ -135,8 +135,6 @@ VITESSE_MAX_MS = 2.0         # Limite logicielle absolue. Ne pas dépasser.
 STUCK_DIST_MM = 400          # Distance frontale (mm) en dessous de laquelle on
                              # incrémente le compteur de blocage.
                              # Plage : 200–800.
-
-ESCAPE_REVERSE_DIST_MM = 300  # Distance de fuite mesurée par le Lidar avant pendant la marche arrière (mm).
 
 STUCK_TICKS = 6             # Nombre de ticks consécutifs avant de déclencher
                              # la manœuvre de recul. À 50 Hz, 6 = ~0.12 s.
