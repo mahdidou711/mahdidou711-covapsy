@@ -204,8 +204,7 @@ def main():
                     print(f"[RECUL] Bloqué → recul {config.T_REVERSE_S}s braquage {escape_angle:+.0f}°")
                     # Braquer AVANT de reculer → servo tourne pendant tout le recul.
                     act.set_vitesse(0)
-                    act.set_direction(escape_angle)
-                    act.reculer(config.T_REVERSE_S)
+                    act.reculer(config.T_REVERSE_S, force_angle_deg=escape_angle)
 
                     # Phase avant forcée avec même braquage
                     escape_ticks = config.ESCAPE_TICKS

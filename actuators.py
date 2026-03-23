@@ -52,10 +52,15 @@ class Actuators:
             dc = config.ESC_DUTY_NEUTRAL + dead + ratio * delta_max
         self.pwm_prop.change_duty_cycle(clamp(dc, config.DUTY_MIN_CLAMP, config.DUTY_MAX_CLAMP))
 
-    def reculer(self, duree_s: float = None):
+    def reculer(self, duree_s: float = None, force_angle_deg: float = None):
         # duree_s par défaut = config.T_REVERSE_S.
         if duree_s is None:
             duree_s = config.T_REVERSE_S
+
+        # Rafraîchir l'angle pour éviter le recentrage matériel
+        if force_angle_deg is not None:
+            self.set_direction(force_angle_deg)
+
         # Séquence double-tap pour ESC hobby (4 étapes) :
         #   1. Frein (REV_START) → l'ESC interprète comme "brake"
         #   2. Retour au neutral
