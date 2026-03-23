@@ -136,7 +136,7 @@ STUCK_DIST_MM = 400          # Distance frontale (mm) en dessous de laquelle on
                              # incrémente le compteur de blocage.
                              # Plage : 200–800.
 
-ESCAPE_REVERSE_DIST_MM = 300 # Distance de fuite mesurée par le Lidar avant pendant la marche arrière (mm).
+ESCAPE_REVERSE_DIST_MM = 300  # Distance de fuite mesurée par le Lidar avant pendant la marche arrière (mm).
 
 STUCK_TICKS = 6             # Nombre de ticks consécutifs avant de déclencher
                              # la manœuvre de recul. À 50 Hz, 6 = ~0.12 s.
