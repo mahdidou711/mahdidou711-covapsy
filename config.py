@@ -136,8 +136,8 @@ STUCK_DIST_MM = 400          # Distance frontale (mm) en dessous de laquelle on
                              # incrémente le compteur de blocage.
                              # Plage : 200–800.
 
-STUCK_TICKS = 12             # Nombre de ticks consécutifs avant de déclencher
-                             # la manœuvre de recul. À 50 Hz, 12 = ~0.25 s.
+STUCK_TICKS = 6             # Nombre de ticks consécutifs avant de déclencher
+                             # la manœuvre de recul. À 50 Hz, 6 = ~0.12 s.
                              # Plage : 10–50.
 
 STUCK_AV_ZERO_TICKS = 15    # Nombre de ticks consécutifs avec av=0 (pas de
@@ -153,7 +153,7 @@ ESCAPE_COOLDOWN_TICKS = 50   # Ticks de cooldown après la phase escape avant qu
 # Capteurs Additionnels
 # -----------------------------------------------------------------------------
 SONAR_ACTIF = True            # mettre False si le sonar n'est pas branché
-SONAR_ARRIERE_SEUIL_CM = 20   # distance minimale arrière avant d'arrêter le recul
+SONAR_ARRIERE_SEUIL_CM = 45   # distance minimale arrière avant d'arrêter le recul (augmenté pour l'inertie)
 
 # -----------------------------------------------------------------------------
 # Validations de sécurité (résistantes à python3 -O)

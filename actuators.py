@@ -83,7 +83,8 @@ class Actuators:
         while time.monotonic() - t0 < duree_s:
             if sonar_module:
                 dist = sonar_module.get_sonar_arriere()
-                if dist is not None and dist < config.SONAR_ARRIERE_SEUIL_CM:
+                if dist is not None and dist < getattr(config, "SONAR_ARRIERE_SEUIL_CM", 30):
+                    print(f"[SONAR] Obstacle arrière détecté à {dist}cm ! Arrêt du recul.")
                     break
             time.sleep(0.02)
 
