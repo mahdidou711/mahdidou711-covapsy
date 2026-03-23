@@ -88,7 +88,7 @@ def main():
         # Après la phase avant, cooldown pour ne pas re-déclencher stuck.
         escape_cooldown = 0
 
-        while True:
+        while not stop_event.is_set():
             t0 = time.monotonic()
             angle = 0.0
             vitesse = 0.0

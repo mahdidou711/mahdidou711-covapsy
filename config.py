@@ -120,7 +120,7 @@ DT_S = 1.0 / CONTROL_HZ     # Période de la boucle en secondes. Calculé automa
 # Vitesse
 # -----------------------------------------------------------------------------
 
-VITESSE_MS = 0.3             # Vitesse de croisière (m/s). Plage : 0.3–0.8.
+VITESSE_MS = 0.35             # Vitesse de croisière (m/s). Plage : 0.3–0.8.
                              # Commencer à 0.3 le jour des essais, augmenter si stable.
 
 VITESSE_MIN = 0.28           # Vitesse plancher (m/s). Ne jamais descendre en dessous.
