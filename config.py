@@ -138,7 +138,7 @@ STUCK_DIST_MM = 400          # Distance frontale (mm) en dessous de laquelle on
 
 STUCK_TICKS = 6             # Nombre de ticks consécutifs avant de déclencher
                              # la manœuvre de recul. À 50 Hz, 6 = ~0.12 s.
-                             # Plage : 10–50.
+                             # Plage : 5–50.
 
 STUCK_AV_ZERO_TICKS = 15    # Nombre de ticks consécutifs avec av=0 (pas de
                              # mesure devant) ET murs latéraux proches → bloqué.

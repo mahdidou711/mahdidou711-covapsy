@@ -26,10 +26,10 @@
 | ESC neutral | `ESC_DUTY_NEUTRAL` | 7.78 % duty |
 | ESC forward start | `ESC_DUTY_FWD_START` | 7.88 % (above neutral) |
 | ESC reverse engage | `ESC_DUTY_REV_START` | 7.20 % |
-| ESC reverse stable | `ESC_DUTY_REV_STABLE` | 6.70 % |
+| ESC reverse stable | `ESC_DUTY_REV_STABLE` | 7.00 % (slow reverse) |
 | Servo center | `SERVO_DUTY_CENTER` | 7.85 % |
-| Servo left (MIN) | `SERVO_DUTY_MIN` | 6.85 % |
-| Servo right (MAX) | `SERVO_DUTY_MAX` | 8.60 % |
+| Servo left (MIN physical) | `SERVO_DUTY_MIN` | 6.65 % |
+| Servo right (MAX physical) | `SERVO_DUTY_MAX` | 8.80 % |
 
 ### ESC notes
 - **Forward**: above neutral (7.88+) — below neutral is the braking/deadband zone
@@ -75,24 +75,24 @@ Reactive navigation at 50 Hz:
 
 ### Stuck detection — two triggers
 
-**Trigger 1 — counter**: `front_min < STUCK_DIST_MM` for `STUCK_TICKS` consecutive ticks (25 = 0.5 s at 50 Hz)
+**Trigger 1 — counter**: `front_min < STUCK_DIST_MM` for `STUCK_TICKS` consecutive ticks (6 = ~0.12 s at 50 Hz)
 
-**Trigger 2 — zero front**: all front sector measurements are 0 (too close to measure) AND at least one lateral wall < 1000 mm for `STUCK_AV_ZERO_TICKS` ticks (15 = 0.3 s) — handles the case where the car is wedged so close to a wall that the lidar returns no front measurement
+**Trigger 2 — zero front**: all front sector measurements are 0 (too close to measure) AND at least one lateral wall < 1000 mm for `STUCK_AV_ZERO_TICKS` ticks (15 = ~0.3 s) — handles the case where the car is wedged so close to a wall that the lidar returns no front measurement
 
 ### Reverse / Escape sequence
 
 ```
 stuck detected
   → choose open side: left_min vs right_min over sector [85–95°] / [265–275°]
-  → set steering toward open side
+  → set steering toward obstacle side (Ackermann reverse turning to align rear to wall)
   → reculer():
       1. duty → REV_START  (brake,  REVERSE_ENGAGE_S)
       2. duty → NEUTRAL    (reset,  REVERSE_ENGAGE_S)
       3. duty → REV_START  (brake,  REVERSE_ENGAGE_S)   ← double-tap
-      4. duty → REV_STABLE for T_REVERSE_S
-         (interrupted early if rear sonar < SONAR_ARRIERE_SEUIL_CM)
+      4. duty → REV_STABLE for T_REVERSE_S (servo active during whole tap seq)
+         (interrupted early if rear sonar < SONAR_ARRIERE_SEUIL_CM -> currently 45 cm)
       5. duty → NEUTRAL
-  → escape phase: drive forward with same steering for ESCAPE_TICKS ticks (40 = 0.8 s)
+  → escape phase: drive forward with opposite steering for ESCAPE_TICKS ticks (40 = 0.8 s)
      (interrupted early if front_min < STUCK_DIST_MM to prevent blind re-crashing)
   → cooldown: ESCAPE_COOLDOWN_TICKS ticks (50 = 1.0 s) before stuck detection resumes
 ```

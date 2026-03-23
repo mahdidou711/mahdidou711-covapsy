@@ -16,8 +16,8 @@ def angle_deg_to_duty(angle_deg: float) -> float:
 
     Valeurs calibrées :
       centre = 7.85 %  (roues droites)
-      min    = 6.85 %  (butée gauche, -18°)
-      max    = 8.60 %  (butée droite, +18°)
+      min    = 6.65 %  (butée gauche)
+      max    = 8.80 %  (butée droite)
       débattement = ±18°
     """
     # getattr avec fallback 18.0 : protège contre un config incomplet lors des tests.
