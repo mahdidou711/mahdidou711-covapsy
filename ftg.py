@@ -93,7 +93,7 @@ def compute_ftg(
         # On calcule une position linéaire continue pour gérer le rebouclage
         # Les points sont ordonnés de 360-sector_deg vers 360, puis de 0 vers sector_deg
         linear_idx = idx if idx >= 180 else idx + 360
-        
+
         if dist >= d_min_mm:
             # Si le dernier point du gap courant est trop loin numériquement (saut de >3°)
             # Cela veut dire qu'il y a des zéros au milieu qu'on a sautés. On coupe le gap.
@@ -101,7 +101,7 @@ def compute_ftg(
                 if len(current_gap) >= w_min_pts:
                     gaps.append(current_gap)
                 current_gap = []
-            
+
             current_gap.append((idx, dist))
             last_idx_unwrapped = linear_idx
         else:
