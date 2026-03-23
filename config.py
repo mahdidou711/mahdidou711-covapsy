@@ -26,10 +26,10 @@ SERVO_DUTY_CENTER = 7.85    # Duty cycle (%) roues droites. Calibré terrain : 7
                              # Si la voiture tire à gauche/droite en ligne droite :
                              # ajuster de ±0.05 jusqu'à rouler droit.
 
-SERVO_DUTY_MIN = 6.85       # Duty cycle (%) butée gauche. Calibré terrain : 6.85.
+SERVO_DUTY_MIN = 6.65       # Duty cycle (%) butée gauche. Calibré terrain : 6.85.
                              # Ne pas descendre sous 6.00 (butée mécanique).
 
-SERVO_DUTY_MAX = 8.60       # Duty cycle (%) butée droite. Calibré terrain : 8.60.
+SERVO_DUTY_MAX = 8.80       # Duty cycle (%) butée droite. Calibré terrain : 8.60.
                              # Ne pas dépasser 10.00 (butée mécanique).
 
 STEER_ANGLE_MAX_DEG = 18.0   # Débattement max en degrés de chaque côté.
@@ -85,8 +85,8 @@ W_MIN_PTS = 20               # Largeur spatiale minimale d'un gap valide (points
                              # Augmenter → ignore les petits gaps (plus sûr).
                              # Diminuer → accepte des passages étroits.
 
-K_FTG = 1.0                  # Gain angulaire FTG : angle_commande = K_FTG * angle_gap_centre.
-                             # Plage : 0.2–1.0.
+K_FTG = 1.6                  # Gain angulaire FTG : angle_commande = K_FTG * angle_gap_centre.
+                             # Plage : 0.2–2.0.
                              # Augmenter → braquage plus agressif dans les virages.
                              # Diminuer → braquage plus doux, risque de rater les virages.
 
@@ -120,10 +120,10 @@ DT_S = 1.0 / CONTROL_HZ     # Période de la boucle en secondes. Calculé automa
 # Vitesse
 # -----------------------------------------------------------------------------
 
-VITESSE_MS = 0.35             # Vitesse de croisière (m/s). Plage : 0.3–0.8.
+VITESSE_MS = 0.50             # Vitesse de croisière (m/s). Plage : 0.3–0.8.
                              # Commencer à 0.3 le jour des essais, augmenter si stable.
 
-VITESSE_MIN = 0.28           # Vitesse plancher (m/s). Ne jamais descendre en dessous.
+VITESSE_MIN = 0.35           # Vitesse plancher (m/s). Ne jamais descendre en dessous.
                              # En dessous de ~0.25 le moteur n'a plus de couple.
 
 VITESSE_MAX_MS = 2.0         # Limite logicielle absolue. Ne pas dépasser.
