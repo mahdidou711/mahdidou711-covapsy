@@ -143,8 +143,13 @@ def main():
                 else:
                     stuck_av_zero = 0
 
-                # Check de collision critique pendant escape
-                if escape_ticks > 0 and (front_blocked or (front_min is not None and front_min < config.STUCK_DIST_MM)):
+                # Check de collision critique pendant escape.
+                # On n'annule QUE si la distance frontale est CONFIRMÉE < cancel_dist.
+                # front_blocked (av=0) = distance inconnue mais < 200 mm datasheet :
+                # on ne sait pas si c'est 10 mm ou 190 mm → ne pas annuler,
+                # mais ne pas avancer non plus (voir ci-dessous).
+                cancel_dist = getattr(config, "ESCAPE_CANCEL_DIST_MM", 200)
+                if escape_ticks > 0 and (front_min is not None and front_min < cancel_dist):
                     print(f"[SECURITE] Mur frontal ({front_min}mm) détecté pendant escape -> annulation escape.")
                     escape_ticks = 0
 
@@ -155,7 +160,12 @@ def main():
                     escape_forward_angle = -escape_angle
                     print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ESCAPE {escape_ticks} {escape_forward_angle:+.0f}°")
                     act.set_direction(escape_forward_angle)
-                    act.set_vitesse(config.VITESSE_MIN)
+                    if front_blocked:
+                        # Secteur avant aveugle (< 200 mm) : on braque mais on n'avance pas.
+                        # Les ticks se décomptent quand même → sortie propre de l'escape.
+                        act.set_vitesse(0.0)
+                    else:
+                        act.set_vitesse(config.VITESSE_MIN)
                 else:
                     angle = compute_ftg(scan, config.D_MIN_MM, config.W_MIN_PTS, config.K_FTG,
                                         sector_deg=config.FTG_SECTOR_DEG,
@@ -163,17 +173,27 @@ def main():
 
                     # Vitesse proportionnelle à la distance frontale.
                     if front_blocked:
-                        vitesse = config.VITESSE_MIN
+                        vitesse = 0.0  # secteur avant entièrement aveugle (obstacles < 200 mm) → arrêt complet
                         print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | BLOCKED v={vitesse:.2f}")
-                    elif front_min is not None and front_min < config.D_MIN_MM:
-                        ratio = max(0.0, (front_min - config.COLLISION_DIST_MM)) / \
-                                (config.D_MIN_MM - config.COLLISION_DIST_MM)
-                        ratio = min(1.0, max(0.0, ratio))
-                        vitesse = config.VITESSE_MIN + (config.VITESSE_MS - config.VITESSE_MIN) * ratio
-                        print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ftg={angle:+.1f}° v={vitesse:.2f}")
                     else:
-                        vitesse = config.VITESSE_MS
-                        print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ftg={angle:+.1f}°")
+                        # Vitesse adaptative expérimentale avec K_V si config.K_V est activé (> 0, différent de None)
+                        k_v = getattr(config, "K_V", None)
+                        if k_v is not None and k_v > 0.0:  # K_V > 0 : vitesse adaptative active — la logique COLLISION_DIST_MM ci-dessous est inactive tant que K_V > 0
+                            dist_vitesse = front_min if front_min is not None else 0
+                            v_calcule = k_v * (dist_vitesse / 1000.0)
+                            vitesse = min(config.VITESSE_MS, max(config.VITESSE_MIN, v_calcule))
+                            print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | K_V v={vitesse:.2f}")
+                        else:
+                            # Logique originelle
+                            if front_min is not None and front_min < config.D_MIN_MM:
+                                ratio = max(0.0, (front_min - config.COLLISION_DIST_MM)) / \
+                                        (config.D_MIN_MM - config.COLLISION_DIST_MM)
+                                ratio = min(1.0, max(0.0, ratio))
+                                vitesse = config.VITESSE_MIN + (config.VITESSE_MS - config.VITESSE_MIN) * ratio
+                                print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ftg={angle:+.1f}° v={vitesse:.2f}")
+                            else:
+                                vitesse = config.VITESSE_MS
+                                print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ftg={angle:+.1f}°")
 
                     act.set_direction(angle)
                     act.set_vitesse(vitesse)
@@ -220,7 +240,7 @@ def main():
                 etat = "EVITE" if escape_ticks > 0 else "AVANCE"
                 current_angle = escape_angle if escape_ticks > 0 else angle
                 current_vitesse = config.VITESSE_MIN if escape_ticks > 0 else vitesse
-                log_writer.writerow([round(time.monotonic(), 3), front_min if front_min else -1, round(current_angle, 1), round(current_vitesse, 3), etat, stuck_count])
+                log_writer.writerow([round(time.monotonic(), 3), front_min if front_min is not None else -1, round(current_angle, 1), round(current_vitesse, 3), etat, stuck_count])
                 log_file.flush()
 
             # Régulation de fréquence : on calcule le temps restant avant le

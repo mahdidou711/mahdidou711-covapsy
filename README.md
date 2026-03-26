@@ -62,7 +62,6 @@
 ---
 
 ## Algorithms
-
 ### Follow-the-Gap (FTG)
 
 Reactive navigation at 50 Hz:
@@ -162,8 +161,8 @@ All tuning parameters are centralized in `config.py`. **This is the only file to
 
 | Parameter | Default | Description |
 |---|---|---|
-| `VITESSE_MS` | 0.3 m/s | Target forward speed — start here, increase if stable |
-| `VITESSE_MIN` | 0.28 m/s | Minimum speed — ESC deadband floor |
+| `VITESSE_MS` | 0.45 m/s | Target forward speed — start here, increase if stable |
+| `VITESSE_MIN` | 0.30 m/s | Minimum speed — ESC deadband floor |
 | `VITESSE_MAX_MS` | 2.0 m/s | Hard software cap — do not exceed |
 
 ### FTG
@@ -172,7 +171,7 @@ All tuning parameters are centralized in `config.py`. **This is the only file to
 |---|---|---|
 | `D_MIN_MM` | 1500 mm | Safety bubble radius — increase = more conservative |
 | `W_MIN_PTS` | 20 points | Minimum width of a valid gap |
-| `K_FTG` | 1.0 | Steering gain — increase = more aggressive turns |
+| `K_FTG` | 1.6 | Steering gain — increase = more aggressive turns |
 | `FTG_SECTOR_DEG` | 150° | Half-angle of the forward lidar sector analysed by FTG |
 
 ### Collision / Speed control
@@ -187,7 +186,7 @@ All tuning parameters are centralized in `config.py`. **This is the only file to
 | Parameter | Default | Description |
 |---|---|---|
 | `STUCK_DIST_MM` | 400 mm | Front distance threshold to increment stuck counter (also interrupts escape phase to prevent crashing) |
-| `STUCK_TICKS` | 25 (0.5 s) | Consecutive ticks below threshold to trigger reverse |
+| `STUCK_TICKS` | 6 (~0.12 s) | Consecutive ticks below threshold to trigger reverse |
 | `STUCK_AV_ZERO_TICKS` | 15 (0.3 s) | Ticks with no front measurement + lateral walls close → stuck |
 | `T_REVERSE_S` | 1.0 s | Max reverse duration (can be cut short by rear sonar) |
 | `REVERSE_ENGAGE_S` | 0.10 s | Delay between steps of the double-tap sequence |
@@ -231,10 +230,14 @@ covapsy/
 ## Roadmap
 
 - [ ] Verify LiDAR angle convention on hardware (`cal_lidar.py`)
-- [ ] PID lateral controller (wall-following complement to FTG)
-- [ ] PPO training in Webots simulation
-- [ ] Sim-to-real policy transfer
+- [x] Fix servo drift during reverse double-tap (`actuators.py` — `set_direction()` between phases)
+- [x] Sync calibration scripts with config.py (`cal_servo.py`, `cal_esc_reverse.py`)
+- [x] Adaptive speed via K_V parameter (optional alternative to linear interpolation)
 - [ ] Multi-car avoidance / overtaking
+
+---
+
+## Known issues
 
 ---
 

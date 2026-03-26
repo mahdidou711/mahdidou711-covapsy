@@ -26,10 +26,10 @@ SERVO_DUTY_CENTER = 7.85    # Duty cycle (%) roues droites. Calibré terrain : 7
                              # Si la voiture tire à gauche/droite en ligne droite :
                              # ajuster de ±0.05 jusqu'à rouler droit.
 
-SERVO_DUTY_MIN = 6.65       # Duty cycle (%) butée gauche. Calibré terrain : 6.85.
+SERVO_DUTY_MIN = 6.65       # Duty cycle (%) butée gauche. Calibré terrain : 6.65.
                              # Ne pas descendre sous 6.00 (butée mécanique).
 
-SERVO_DUTY_MAX = 8.80       # Duty cycle (%) butée droite. Calibré terrain : 8.60.
+SERVO_DUTY_MAX = 8.80       # Duty cycle (%) butée droite. Calibré terrain : 8.80.
                              # Ne pas dépasser 10.00 (butée mécanique).
 
 STEER_ANGLE_MAX_DEG = 18.0   # Débattement max en degrés de chaque côté.
@@ -56,6 +56,8 @@ ESC_DUTY_REV_START  = 7.20  # Duty pour engager le reverse.
 ESC_DUTY_REV_STABLE = 7.00  # Duty pour reculer stable.
 T_REVERSE_S = 1.0            # Durée du recul en secondes.
 REVERSE_ENGAGE_S = 0.10      # Temps entre chaque étape de la séquence reverse (s).
+                             # Ne pas dépasser 0.10 : certains ESC hobby ont un timeout court
+                             # entre les phases du double-tap et ne lancent pas le reverse avec 0.20.
 
 # -----------------------------------------------------------------------------
 # Lidar — RPLidar A2M12
@@ -120,10 +122,10 @@ DT_S = 1.0 / CONTROL_HZ     # Période de la boucle en secondes. Calculé automa
 # Vitesse
 # -----------------------------------------------------------------------------
 
-VITESSE_MS = 0.45             # Vitesse de croisière (m/s). Plage : 0.3–0.8.
+VITESSE_MS = 0.30             # Vitesse de croisière (m/s). Plage : 0.3–0.8.
                              # Commencer à 0.3 le jour des essais, augmenter si stable.
 
-VITESSE_MIN = 0.30           # Vitesse plancher (m/s). Ne jamais descendre en dessous.
+VITESSE_MIN = 0.25          # Vitesse plancher (m/s). Ne jamais descendre en dessous.
                              # En dessous de ~0.25 le moteur n'a plus de couple.
 
 VITESSE_MAX_MS = 2.0         # Limite logicielle absolue. Ne pas dépasser.
@@ -132,7 +134,7 @@ VITESSE_MAX_MS = 2.0         # Limite logicielle absolue. Ne pas dépasser.
 # Détection blocage et recul
 # -----------------------------------------------------------------------------
 
-STUCK_DIST_MM = 400          # Distance frontale (mm) en dessous de laquelle on
+STUCK_DIST_MM = 500          # Distance frontale (mm) en dessous de laquelle on
                              # incrémente le compteur de blocage.
                              # Plage : 200–800.
 
@@ -149,11 +151,20 @@ ESCAPE_TICKS = 40            # Durée de la phase avant post-recul (ticks). 25�
 ESCAPE_COOLDOWN_TICKS = 50   # Ticks de cooldown après la phase escape avant que
                              # la détection de blocage ne se réactive. 50 = 1 s à 50 Hz.
 
+ESCAPE_CANCEL_DIST_MM = 200  # Annuler la phase escape seulement si obstacle frontal < cette distance (mm).
+
 # -----------------------------------------------------------------------------
 # Capteurs Additionnels
 # -----------------------------------------------------------------------------
 SONAR_ACTIF = True            # mettre False si le sonar n'est pas branché
-SONAR_ARRIERE_SEUIL_CM = 45   # distance minimale arrière avant d'arrêter le recul (augmenté pour l'inertie)
+SONAR_ARRIERE_SEUIL_CM = 25   # distance minimale arrière avant d'arrêter le recul.
+
+# -----------------------------------------------------------------------------
+# Vitesse adaptative proportionnelle
+# -----------------------------------------------------------------------------
+# Vitesse adaptative. Si K_V > 0, la logique de ralentissement par COLLISION_DIST_MM dans main.py est inactive.
+# Mettre K_V = 0.0 pour revenir à la logique COLLISION_DIST_MM.
+K_V = 0.0                    # Gain pour mode de vitesse adaptatif basé sur la distance frontale
 
 # -----------------------------------------------------------------------------
 # Validations de sécurité (résistantes à python3 -O)
@@ -170,3 +181,7 @@ if not (ESC_DUTY_REV_START < ESC_DUTY_NEUTRAL):
     raise ValueError(f"REV_START ({ESC_DUTY_REV_START}) doit être < NEUTRAL ({ESC_DUTY_NEUTRAL})")
 if not (COLLISION_DIST_MM < D_MIN_MM):
     raise ValueError(f"COLLISION_DIST_MM ({COLLISION_DIST_MM}) doit être < D_MIN_MM ({D_MIN_MM}) — sinon ZeroDivisionError dans main.py")
+if VITESSE_MIN < 0.0:
+    raise ValueError(f"VITESSE_MIN doit être >= 0.0 : {VITESSE_MIN}")
+if CONTROL_HZ <= 0:
+    raise ValueError(f"CONTROL_HZ doit être > 0 : {CONTROL_HZ}")
