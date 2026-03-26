@@ -71,19 +71,19 @@ class Actuators:
         time.sleep(config.REVERSE_ENGAGE_S)
         if force_angle_deg is not None:
             self.set_direction(force_angle_deg)
-            
+
         # Étape 2 : retour neutral
         self.pwm_prop.change_duty_cycle(config.ESC_DUTY_NEUTRAL)
         time.sleep(config.REVERSE_ENGAGE_S)
         if force_angle_deg is not None:
             self.set_direction(force_angle_deg)
-            
+
         # Étape 3 : reverse engagé (double-tap)
         self.pwm_prop.change_duty_cycle(config.ESC_DUTY_REV_START)
         time.sleep(config.REVERSE_ENGAGE_S)
         if force_angle_deg is not None:
             self.set_direction(force_angle_deg)
-            
+
         self.pwm_prop.change_duty_cycle(config.ESC_DUTY_REV_STABLE)
 
         # Étape 4 : recul stable en boucle pour pouvoir l'interrompre si obstacle arrière détecté
