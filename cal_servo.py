@@ -23,8 +23,8 @@ DUTY_MAX_CLAMP  = 10.0
 
 # Valeurs de départ (dernière calibration connue — sync config.py)
 SERVO_DUTY_CENTER = 7.85
-SERVO_DUTY_MIN    = 6.85
-SERVO_DUTY_MAX    = 8.60
+SERVO_DUTY_MIN    = 6.65
+SERVO_DUTY_MAX    = 8.80
 
 STEP = 0.05               # Incrément par pression de touche
 

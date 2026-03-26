@@ -28,7 +28,7 @@ ESC_DUTY_NEUTRAL = 7.78
 
 # Valeurs de départ pour le reverse (à affiner)
 ESC_DUTY_REV_START  = 7.20   # Duty d'engagement reverse (doit être < neutral)
-ESC_DUTY_REV_STABLE = 6.70   # Duty de recul stable
+ESC_DUTY_REV_STABLE = 7.00   # Duty de recul stable
 T_REVERSE_S         = 0.4    # Durée du recul stable (secondes). Plus court pour la sécurité en calibration (vs config.py 1.0)
 REVERSE_ENGAGE_S    = 0.1    # Durée d'engagement (secondes)
 

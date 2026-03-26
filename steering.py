@@ -30,11 +30,11 @@ def angle_deg_to_duty(angle_deg: float) -> float:
     x = angle_deg / amax if amax > 0 else 0.0
 
     # Interpolation asymétrique autour du centre :
-    # Le centre (7.85) n'est pas au milieu de [6.85, 8.60], donc la course
-    # gauche (1.00 %) et droite (0.75 %) sont interpolées séparément.
-    # x=+1 → 7.85 + 1×(8.60-7.85) = 8.60  (butée droite)
+    # Le centre (7.85) n'est pas au milieu de [6.65, 8.80], donc la course
+    # gauche (1.20 %) et droite (0.95 %) sont interpolées séparément.
+    # x=+1 → 7.85 + 1×(8.80-7.85) = 8.80  (butée droite)
     # x= 0 → 7.85                           (centre)
-    # x=-1 → 7.85 + (-1)×(7.85-6.85) = 6.85 (butée gauche)
+    # x=-1 → 7.85 + (-1)×(7.85-6.65) = 6.65 (butée gauche)
     if x >= 0:
         duty = config.SERVO_DUTY_CENTER + x * (config.SERVO_DUTY_MAX - config.SERVO_DUTY_CENTER)
     else:

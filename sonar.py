@@ -40,8 +40,8 @@ def sonar_thread_func(stop_event: threading.Event):
             # Pause courte pour laisser respirer le bus entre deux mesures.
             time.sleep(0.01)
 
-        except OSError:
-            # Retourner None de façon silencieuse en cas d'erreur I2C
+        except Exception as e:
+            print(f"[sonar] erreur thread : {type(e).__name__}: {e}")
             with sonar_lock:
                 sonar_data["arriere_cm"] = None
             time.sleep(0.07)

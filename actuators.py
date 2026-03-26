@@ -69,18 +69,29 @@ class Actuators:
         # Étape 1 : frein
         self.pwm_prop.change_duty_cycle(config.ESC_DUTY_REV_START)
         time.sleep(config.REVERSE_ENGAGE_S)
+        if force_angle_deg is not None:
+            self.set_direction(force_angle_deg)
+            
         # Étape 2 : retour neutral
         self.pwm_prop.change_duty_cycle(config.ESC_DUTY_NEUTRAL)
         time.sleep(config.REVERSE_ENGAGE_S)
+        if force_angle_deg is not None:
+            self.set_direction(force_angle_deg)
+            
         # Étape 3 : reverse engagé (double-tap)
         self.pwm_prop.change_duty_cycle(config.ESC_DUTY_REV_START)
         time.sleep(config.REVERSE_ENGAGE_S)
+        if force_angle_deg is not None:
+            self.set_direction(force_angle_deg)
+            
         self.pwm_prop.change_duty_cycle(config.ESC_DUTY_REV_STABLE)
 
         # Étape 4 : recul stable en boucle pour pouvoir l'interrompre si obstacle arrière détecté
         t0 = time.monotonic()
 
         while time.monotonic() - t0 < duree_s:
+            if force_angle_deg is not None:
+                self.set_direction(force_angle_deg)
             if sonar_module:
                 dist = sonar_module.get_sonar_arriere()
                 if dist is not None and dist < getattr(config, "SONAR_ARRIERE_SEUIL_CM", 30):
