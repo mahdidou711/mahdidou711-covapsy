@@ -6,7 +6,7 @@
 #   scan[0]   = avant
 #   scan[90]  = gauche
 #   scan[270] = droite
-#   0 = absence de mesure, PAS un obstacle à 0 mm
+#   0 = obstacle hors-spec (< 200 mm portée minimale datasheet), pas une absence de mesure
 #
 # Convention de sortie :
 #   0°   = tout droit
@@ -14,6 +14,8 @@
 #   -x°  = braquer à gauche (vers scan[90])
 #
 # Expose : compute_ftg() et detect_collision().
+
+from typing import Optional
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:
@@ -25,7 +27,7 @@ def compute_ftg(
     d_min_mm: float,
     w_min_pts: int,
     k_ftg: float,
-    sector_deg: int = None,
+    sector_deg: Optional[int] = None,
     steer_limit_deg: float = 18.0,
 ) -> float:
     """
@@ -41,7 +43,7 @@ def compute_ftg(
 
     Retourne :
         angle_cmd en degrés, clampé dans [-steer_limit_deg, +steer_limit_deg].
-        0.0 si aucun gap trouvé (fallback tout droit).
+        Si aucun gap trouvé, braque vers le point le plus éloigné du secteur.
 
     Étapes :
         1. Extraire la zone avant (±sector_deg)
@@ -65,19 +67,17 @@ def compute_ftg(
     # la gauche lointaine (100), sans discontinuité au passage par 0.
     points = []
     for i in range(360 - sector_deg, 360):
-        if scan[i] != 0:
-            points.append((i, scan[i]))
+        points.append((i, scan[i]))
     for i in range(0, sector_deg + 1):
-        if scan[i] != 0:
-            points.append((i, scan[i]))
+        points.append((i, scan[i]))
 
     if not points:
         return 0.0
 
     # ── ÉTAPE 2 — Seuillage ───────────────────────────────────────────
     # Chaque point est marqué libre (distance >= d_min_mm) ou occupé.
-    # Les zéros ont déjà été exclus à l'étape 1 car 0 = absence de mesure,
-    # pas un obstacle — les compter comme occupé fermerait les gaps à tort.
+    # Les zéros sont inclus dans points avec dist=0 < d_min_mm → automatiquement
+    # marqués occupés → tout gap traversant un obstacle < 200 mm est rompu correctement.
 
     # ── ÉTAPE 3 — Trouver les gaps ────────────────────────────────────
     # Un gap est une séquence contiguë de points libres dans la liste
@@ -159,8 +159,8 @@ def compute_ftg(
     # ── ÉTAPE 6 — Appliquer le gain et clamper ───────────────────────
     # k_ftg contrôle l'agressivité du braquage :
     #   k_ftg=0.2 → braquage doux, risque de rater les virages
-    #   k_ftg=1.0 → braquage agressif, réactif mais peut osciller
-    # À régler le jour des essais (valeur initiale : 1.0).
+    #   k_ftg=1.6 → braquage agressif, réactif mais peut osciller
+    # À régler le jour des essais (valeur initiale : 1.6).
     angle_cmd = _clamp(k_ftg * angle_physique, -steer_limit_deg, steer_limit_deg)
     return angle_cmd
 
@@ -180,9 +180,8 @@ def detect_collision(scan: list, seuil_mm: float, sector_deg: int = 30) -> bool:
     min_dist = None
     for i in list(range(0, sector_deg + 1)) + list(range(360 - sector_deg, 360)):
         d = scan[i]
-        # Ignorer 0 = absence de mesure (pas un obstacle).
         if d == 0:
-            continue
+            return True  # 0 = obstacle < 200 mm = collision imminente
         if min_dist is None or d < min_dist:
             min_dist = d
 
