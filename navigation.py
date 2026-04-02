@@ -85,11 +85,9 @@ def calculer_vitesse(scan: Optional[Sequence[float]], front_min: Optional[float]
         contraste = abs(s_g - s_d)
         contraste_max = max(s_g, s_d)
         r = contraste / (contraste_max + config.SPEED_EPS)
-        v_lat = (
-            config.VITESSE_PLANCHER
-            + (config.VITESSE_CROISIERE - config.VITESSE_PLANCHER)
-            * math.exp(-config.SPEED_ALPHA * r)
-        )
+        v_lat = config.VITESSE_PLANCHER + (
+            config.VITESSE_CROISIERE - config.VITESSE_PLANCHER
+        ) * math.exp(-config.SPEED_ALPHA * r)
 
     # Terme frontal
     if front_min is None or front_min <= 0:

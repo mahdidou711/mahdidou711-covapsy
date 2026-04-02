@@ -50,7 +50,7 @@ BAUDRATE = 256000            # débit A2M12
 LIDAR_FRESH_MAX_S   = 0.50   # scan considéré périmé au-delà de cette durée
 LIDAR_TIMEOUT_TICKS = 15     # arrêt propulsion après N ticks sans scan frais
 LIDAR_RATE_WIN_S    = 2.0    # fenêtre de calcul du taux de scan
-LIDAR_REUSE_LAST_SCAN = True # réutilise le dernier scan frais en cas de timeout
+LIDAR_REUSE_LAST_SCAN = True  # réutilise le dernier scan frais en cas de timeout
 
 # -----------------------------------------------------------------------------
 # Navigation — direction
@@ -60,14 +60,14 @@ NAV_K   = 18.0               # gain de direction (sans logarithme)
 NAV_EPS = 1.0                # seuil d'insensibilité latérale (mm)
 
 DIR_LEFT_SECTOR  = (30, 60)  # secteur latéral gauche  — scan[30..60]
-DIR_RIGHT_SECTOR = (300, 330) # secteur latéral droit  — scan[300..330]
+DIR_RIGHT_SECTOR = (300, 330)  # secteur latéral droit  — scan[300..330]
 
 # -----------------------------------------------------------------------------
 # Navigation — vitesse latérale
 # -----------------------------------------------------------------------------
 
 SPEED_LEFT_SECTOR  = (35, 55)   # secteur gauche pour la loi de vitesse
-SPEED_RIGHT_SECTOR = (305, 325) # secteur droit  pour la loi de vitesse
+SPEED_RIGHT_SECTOR = (305, 325)  # secteur droit  pour la loi de vitesse
 SPEED_EPS          = 1.0        # seuil d'insensibilité vitesse (mm)
 SPEED_ALPHA        = 3.0        # exposant de la loi de vitesse exponentielle
 
