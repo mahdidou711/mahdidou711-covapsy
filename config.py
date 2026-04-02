@@ -87,7 +87,7 @@ FRONT_D_REF_MM    = 600         # distance de référence frontale (mm)
 # -----------------------------------------------------------------------------
 
 CONTROL_HZ = 50              # fréquence de boucle
-DT_S = 1.0 / CONTROL_HZ     # période de boucle
+DT_S = 1.0 / CONTROL_HZ      # période d'un tick à partir de la fréquence cible
 
 # -----------------------------------------------------------------------------
 # Recul et échappement
@@ -126,11 +126,13 @@ STUCK_RECOVERY_ACTIVE = True  # récupération de blocage active
 # Validations de sécurité (résistantes à python3 -O)
 # -----------------------------------------------------------------------------
 
+# Vérifie que les bornes de vitesse restent cohérentes entre elles.
 if not (0.0 < VITESSE_PLANCHER < VITESSE_CROISIERE <= VITESSE_MAX_MS):
     raise ValueError(
         f"Incohérence vitesses : PLANCHER={VITESSE_PLANCHER} "
         f"CROISIERE={VITESSE_CROISIERE} MAX={VITESSE_MAX_MS}"
     )
+# Garde-fous simples sur les principaux paramètres de roulage.
 if not (0.1 <= VITESSE_CROISIERE <= 0.8):
     raise ValueError(f"VITESSE_CROISIERE hors plage [0.1, 0.8] : {VITESSE_CROISIERE}")
 if not (0.5 <= SPEED_ALPHA <= 6.0):
@@ -149,5 +151,6 @@ if not (0.10 <= REVERSE_TAP_S <= 0.50):
     raise ValueError(f"REVERSE_TAP_S hors plage : {REVERSE_TAP_S}")
 if not (0.3 <= REVERSE_DUREE_S <= 3.0):
     raise ValueError(f"REVERSE_DUREE_S hors plage : {REVERSE_DUREE_S}")
+# Empêche un seuil de blocage trop faible ou trop grand.
 if not (200 <= STUCK_DIST_MM <= 800):
     raise ValueError(f"STUCK_DIST_MM hors plage : {STUCK_DIST_MM}")

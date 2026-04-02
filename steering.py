@@ -13,6 +13,7 @@ def angle_deg_to_duty(angle_deg: float) -> float:
     amax = float(getattr(config, "STEER_ANGLE_MAX_DEG", 18.0))  # angle max du servo
     angle_deg = clamp(angle_deg, -amax, amax)  # saturation avant interpolation
 
+    # Ramène l'angle dans une plage normalisée pratique pour l'interpolation.
     x = angle_deg / amax if amax > 0 else 0.0  # -1 gauche, 0 centre, +1 droite
 
     # Interpolation asymétrique autour du centre calibré.

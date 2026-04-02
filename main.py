@@ -21,8 +21,10 @@ if getattr(config, "SONAR_ACTIF", False):
 
 def _iter_front_indices(half_angle_deg: int) -> Iterable[int]:
     """Indices du secteur frontal avec rebouclage 360°."""
+    # Balaye d'abord la fin du tableau pour couvrir la moitié gauche du secteur frontal.
     for idx in range(360 - half_angle_deg, 360):  # partie gauche du secteur frontal
         yield idx  # indices 360-N ... 359
+    # Puis repart à 0 pour couvrir la moitié droite.
     for idx in range(0, half_angle_deg + 1):  # partie droite du secteur frontal
         yield idx  # indices 0 ... N
 
@@ -58,6 +60,7 @@ def _write_log(
     vitesse: float,
 ):
     """Écrit une ligne CSV et force le flush."""
+    # Écrit une ligne complète de télémétrie pour chaque tick de contrôle.
     log_writer.writerow(
         [
             round(time.monotonic(), 3),  # temps monotonic
@@ -83,6 +86,7 @@ def main():
     lidar.start()  # démarrage acquisition
 
     if sonar_module:
+        # Le thread sonar tourne en parallèle tant qu'aucun arrêt n'est demandé.
         threading.Thread(
             target=sonar_module.sonar_thread_func,  # boucle sonar arrière
             args=(stop_event,),  # partage du stop_event
@@ -125,6 +129,7 @@ def main():
             else:
                 ticks_sans_scan += 1  # scan frais manquant
 
+            # Réutilise le dernier scan valide si l'option de repli est active.
             scan = last_scan if config.LIDAR_REUSE_LAST_SCAN else fresh_scan  # stratégie de repli
             lidar_perime = scan is None or ticks_sans_scan >= config.LIDAR_TIMEOUT_TICKS  # plus de scan fiable
             front_min = _compute_front_min(scan)  # min utile devant, y compris sur scan mémorisé
@@ -143,10 +148,12 @@ def main():
                 recovery_triggered = False  # pas de recul sur ce tick par défaut
 
                 if config.STUCK_RECOVERY_ACTIVE:
+                    # Le cooldown empêche de relancer immédiatement un nouveau reverse.
                     if cooldown > 0:
                         cooldown -= 1  # décrémente l'immunité post-recul
                         stuck_count = 0  # pas de détection pendant le cooldown
                     else:
+                        # Incrémente le compteur si un obstacle proche reste devant.
                         if front_min is not None and front_min < config.STUCK_DIST_MM:
                             stuck_count += 1  # obstacle frontal persistant
                         else:
@@ -162,6 +169,7 @@ def main():
                         recovery_triggered = True  # aucune commande AV sur ce tick
 
                 if not recovery_triggered:
+                    # N'envoie les commandes normales que si aucun reverse n'a été lancé sur ce tick.
                     angle_commande = calculer_direction(scan, config.NAV_K, config.NAV_EPS)  # direction active
                     vitesse_commandee = calculer_vitesse(scan, front_min)  # vitesse active
                     act.set_direction(angle_commande)  # applique le braquage
@@ -185,6 +193,7 @@ def main():
                 time.sleep(dt_restant)  # attend le prochain tick
 
     finally:
+        # Coupe toujours les threads et les sorties, même en cas d'exception.
         stop_event.set()  # demande l'arrêt aux threads
         act.stop()  # coupe servo et ESC
         lidar.stop()  # arrête le thread lidar

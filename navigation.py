@@ -17,6 +17,7 @@ def _clamp(value: float, lo: float, hi: float) -> float:
 
 
 def _mean_valid(values: Sequence[float]) -> Optional[float]:
+    # Garde uniquement les distances strictement positives avant de moyenner.
     valid_values = [float(v) for v in values if v > 0]  # ignore les zéros lidar
     if not valid_values:
         return None
@@ -25,6 +26,7 @@ def _mean_valid(values: Sequence[float]) -> Optional[float]:
 
 def _sector_mean(scan: Sequence[float], bounds: Tuple[int, int]) -> Optional[float]:
     start_idx, end_idx = bounds  # bornes inclusives
+    # Extrait le secteur demandé puis délègue le filtrage des mesures invalides.
     return _mean_valid([scan[idx] for idx in range(start_idx, end_idx + 1)])
 
 
@@ -53,6 +55,7 @@ def calculer_direction(scan: Optional[Sequence[float]], k: float, eps: float) ->
     elif d is None:
         d = g
 
+    # Normalise l'écart latéral pour limiter l'effet de la distance absolue aux murs.
     angle = k * (g - d) / (g + d + eps)
     return _clamp(angle, -config.STEER_ANGLE_MAX_DEG, config.STEER_ANGLE_MAX_DEG)
 
@@ -82,6 +85,7 @@ def calculer_vitesse(scan: Optional[Sequence[float]], front_min: Optional[float]
         elif s_d is None:
             s_d = s_g
 
+        # Mesure l'écart relatif gauche/droite pour ralentir davantage en virage serré.
         contraste = abs(s_g - s_d)
         contraste_max = max(s_g, s_d)
         r = contraste / (contraste_max + config.SPEED_EPS)
@@ -93,6 +97,7 @@ def calculer_vitesse(scan: Optional[Sequence[float]], front_min: Optional[float]
     if front_min is None or front_min <= 0:
         f_front = 1.0
     else:
+        # Réduit progressivement la vitesse quand un obstacle se rapproche devant.
         f_front = min(1.0, front_min / config.FRONT_D_REF_MM)
 
     v = v_lat * f_front

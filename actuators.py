@@ -29,19 +29,24 @@ class Actuators:
         self.pwm_dir.change_duty_cycle(dc)  # envoi PWM servo
 
     def _speed_ms_to_duty(self, ms: float) -> float:
+        # Limite la vitesse demandée à la plage supportée par le mapping PWM.
         ms = max(-config.VITESSE_MAX_MS, min(ms, config.VITESSE_MAX_MS))
         if ms == 0:
+            # 0 m/s correspond au neutre ESC.
             dc = config.ESC_DUTY_NEUTRAL
         elif ms > 0:
+            # En marche avant, on part du neutre puis on ajoute la zone morte et le delta utile.
             delta = ms * config.PROP_DELTA_PWM_MAX / config.VITESSE_MAX_MS
             dc = config.ESC_DUTY_NEUTRAL + config.PROP_POINT_MORT_PWM + delta
         else:
+            # En marche arrière, on soustrait le même delta autour du neutre.
             delta = abs(ms) * config.PROP_DELTA_PWM_MAX / config.VITESSE_MAX_MS
             dc = config.ESC_DUTY_NEUTRAL - (config.PROP_POINT_MORT_PWM + delta)
         return clamp(dc, config.DUTY_MIN_CLAMP, config.DUTY_MAX_CLAMP)
 
     def set_vitesse(self, ms: float):
-        dc = self._speed_ms_to_duty(ms)  # mapping terrain de test.py
+        # Convertit la vitesse logique en duty cycle ESC avant envoi.
+        dc = self._speed_ms_to_duty(ms)
         self.pwm_prop.change_duty_cycle(dc)  # envoi PWM ESC
 
     def reculer(self, scan=None, duree_s=None):
@@ -54,12 +59,14 @@ class Actuators:
         left_space = 0.0
         right_space = 0.0
         if scan is not None:
+            # Lit les deux secteurs latéraux utilisés pour choisir le côté du recul.
             ls, le = config.ESCAPE_LEFT_SECTOR
             rs, re = config.ESCAPE_RIGHT_SECTOR
             left_vals  = [scan[i] for i in range(ls, le) if scan[i] > 0]
             right_vals = [scan[i] for i in range(rs, re) if scan[i] > 0]
             left_space  = float(np.mean(left_vals)) if left_vals else 0.0
             right_space = float(np.mean(right_vals)) if right_vals else 0.0
+            # Compare les espaces droite/gauche pour décider d'un braquage ou d'un recul droit.
             delta = right_space - left_space
             if abs(delta) >= config.ESCAPE_SYMMETRY_MM:
                 angle_deg = -float(np.sign(delta)) * config.STEER_ANGLE_MAX_DEG
@@ -94,8 +101,10 @@ class Actuators:
         self.pwm_prop.change_duty_cycle(config.ESC_DUTY_REV_STABLE)
         t0 = time.monotonic()
         while time.monotonic() - t0 < duree_s:
+            # Réaffirme le braquage à chaque boucle pendant le recul stable.
             self.set_direction(angle_deg)
             if sonar_module:
+                # Stoppe le recul si le sonar arrière voit un obstacle proche.
                 dist = sonar_module.get_sonar_arriere()
                 if dist is not None and 1 < dist < config.SONAR_ARRIERE_SEUIL_CM:
                     print(f"[SONAR] Obstacle arrière à {dist}cm, arrêt recul.")

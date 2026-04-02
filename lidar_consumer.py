@@ -18,6 +18,7 @@ class LidarConsumer:
         self._tw_s: float = float(getattr(config, "LIDAR_RATE_WIN_S", 2.0))  # fenêtre du débit
 
     def _update_rate(self, now: float, sid: int):
+        # Empile le scan courant pour estimer le nombre de tours par seconde.
         self._hist.append((now, sid))  # ajoute le scan courant à l'historique
 
         t_min = now - self._tw_s  # borne basse de la fenêtre
@@ -25,6 +26,7 @@ class LidarConsumer:
             self._hist.popleft()  # enlève les points trop anciens
 
         if len(self._hist) >= 2:
+            # Calcule le débit à partir du premier et du dernier scan gardés.
             t0, id0 = self._hist[0]  # plus ancien point gardé
             t1, id1 = self._hist[-1]  # plus récent point gardé
             dt = t1 - t0  # durée de la fenêtre utile
@@ -42,6 +44,7 @@ class LidarConsumer:
 
         age = now - ts if ts > 0 else 1e9  # âge infini tant qu'aucun scan n'existe
 
+        # Un scan frais doit être à la fois nouveau et assez récent.
         is_new = (sid != self._last_id) and (sid > 0)  # nouveau tour disponible
         if is_new:
             self._last_id = sid  # mémorise le dernier scan vu

@@ -15,6 +15,7 @@ def sonar_thread_func(stop_event: threading.Event):
 
     while not stop_event.is_set():
         try:
+            # Ouvre le bus uniquement le temps d'une mesure complète.
             with smbus2.SMBus(bus_number) as bus:  # ouverture du bus à chaque boucle
                 # Nouvelle mesure en cm.
                 bus.write_byte_data(address, 0x00, 0x51)  # commande "range in cm"
@@ -22,6 +23,7 @@ def sonar_thread_func(stop_event: threading.Event):
                 high = bus.read_byte_data(address, 0x02)  # octet haut
                 low = bus.read_byte_data(address, 0x03)  # octet bas
 
+            # Recompose la distance 16 bits renvoyée par le capteur.
             distance_cm = (high << 8) | low  # reconstruction 16 bits en cm
 
             with sonar_lock:

@@ -69,6 +69,7 @@ class Lidar360:
             self._running = v  # expose l'état du thread
 
     def _cleanup(self, lidar: Optional[RPLidar]):
+        # Arrête proprement le driver si l'objet a bien été créé.
         try:
             if lidar is not None:
                 lidar.stop()  # stop des scans côté driver
@@ -104,6 +105,7 @@ class Lidar360:
                 if self._stop_evt.is_set():
                     break  # sortie demandée
 
+                # Reconstruit un tour complet sur 360 indices à partir des mesures brutes.
                 scan_mm = [0] * 360  # nouveau tour vide
                 for quality, angle, dist in scan:
                     # Ignore les mesures invalides.
@@ -113,6 +115,7 @@ class Lidar360:
                     # 0 = avant, 90 = gauche, 270 = droite sur la voiture.
                     idx = (-int(round(angle))) % 360  # angle lidar -> indice scan
                     d = int(dist)  # distance entière en mm
+                    # Conserve la mesure la plus proche si plusieurs points tombent sur le même degré.
                     if scan_mm[idx] == 0 or d < scan_mm[idx]:
                         scan_mm[idx] = d  # garde la plus petite mesure par degré
 
@@ -129,11 +132,13 @@ class Lidar360:
                 try:
                     self._run_once()  # tente un cycle complet d'acquisition
                 except RPLidarException as e:
+                    # Les erreurs driver déclenchent une reconnexion après attente.
                     with self._lock:
                         self._reconnects += 1  # compteur de reconnect
                     self._set_err(f"RPLidarException: {e}")  # erreur driver connue
                     time.sleep(self._sleep_on_error_s)  # attend avant retry
                 except Exception as e:
+                    # Même stratégie de reprise pour les autres erreurs inattendues.
                     with self._lock:
                         self._reconnects += 1  # compteur de reconnect
                     self._set_err(f"{type(e).__name__}: {e}")  # erreur générique
