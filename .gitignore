@@ -3,7 +3,8 @@ __pycache__/
 *.pyo
 *.log
 
-task.md
-implementation_plan.md
+.codex
 CLAUDE.md
 .claude/
+.vscode/
+run_log.csv

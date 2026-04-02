@@ -1,53 +1,42 @@
-# Modules pour capteur ultrason SRF10 communicant en I2C
+"""Lecture du sonar arrière SRF10."""
 
-import smbus2
-import threading
-import time
+import smbus2  # accès I2C au SRF10
+import threading  # lock et stop_event
+import time  # temporisations de mesure
 
-# Variables partagées
-sonar_data = {"arriere_cm": None}
-sonar_lock = threading.Lock()
+sonar_data = {"arriere_cm": None}  # dernière distance arrière en cm
+sonar_lock = threading.Lock()  # protège la donnée partagée
 
 
 def sonar_thread_func(stop_event: threading.Event):
-    """Boucle infinie de lecture du SRF10 et mise à jour thread-safe."""
-    bus_number = 1
-    address = 0x70  # Adresse I2C par défaut du SRF10 (configurable via commande dédiée).
+    """Boucle de mesure arrière."""
+    bus_number = 1  # bus I2C principal du Raspberry Pi
+    address = 0x70  # adresse I2C par défaut du SRF10
 
     while not stop_event.is_set():
         try:
-            # Ouverture du bus à chaque itération : permet la reconnexion automatique
-            # après une OSError prolongée (ex: vibrations arrachant temporairement le bus).
-            # Context manager garantit bus.close() même si une OSError est levée.
-            with smbus2.SMBus(bus_number) as bus:
+            with smbus2.SMBus(bus_number) as bus:  # ouverture du bus à chaque boucle
+                # Nouvelle mesure en cm.
+                bus.write_byte_data(address, 0x00, 0x51)  # commande "range in cm"
+                time.sleep(0.07)  # délai de conversion SRF10
+                high = bus.read_byte_data(address, 0x02)  # octet haut
+                low = bus.read_byte_data(address, 0x03)  # octet bas
 
-                # Déclencher une mesure en cm
-                bus.write_byte_data(address, 0x00, 0x51)
+            distance_cm = (high << 8) | low  # reconstruction 16 bits en cm
 
-                # Délai obligatoire de 70ms pour la réalisation de la mesure
-                time.sleep(0.07)
-
-                # Lecture du résultat sur 16 bits
-                high = bus.read_byte_data(address, 0x02)
-                low  = bus.read_byte_data(address, 0x03)
-
-            distance_cm = (high << 8) | low
-
-            # Mise à jour de la donnée protégée par Lock
             with sonar_lock:
-                sonar_data["arriere_cm"] = distance_cm
+                sonar_data["arriere_cm"] = distance_cm  # publication thread-safe
 
-            # Pause courte pour laisser respirer le bus entre deux mesures.
-            time.sleep(0.01)
+            time.sleep(0.01)  # petite pause entre deux mesures
 
         except Exception as e:
-            print(f"[sonar] erreur thread : {type(e).__name__}: {e}")
+            print(f"[sonar] erreur thread : {type(e).__name__}: {e}")  # diagnostic simple
             with sonar_lock:
-                sonar_data["arriere_cm"] = None
-            time.sleep(0.07)
+                sonar_data["arriere_cm"] = None  # donnée invalide si erreur bus
+            time.sleep(0.07)  # évite une boucle d'erreur trop rapide
 
 
 def get_sonar_arriere():
-    """Accesseur thread-safe pour récupérer la dernière distance en cm."""
+    """Retourne la dernière distance arrière."""
     with sonar_lock:
-        return sonar_data["arriere_cm"]
+        return sonar_data["arriere_cm"]  # lecture thread-safe

@@ -1,266 +1,199 @@
-# ~/covapsy/main.py
-# Boucle de conduite principale — CoVAPSy 2026.
-# Orchestre lidar, actuators et algorithme FTG.
-#
-# Machine à états :
-#   AVANCE : conduite normale, FTG calcule l'angle, vitesse de croisière.
-#   EVITE  : phase avant post-recul, braquage forcé vers le côté le plus dégagé.
-#
-# Ordre de démarrage :
-#   1. Lidar360 (thread d'acquisition)
-#   2. LidarConsumer (lecture non-bloquante)
-#   3. Actuators (PWM servo + ESC)
-#   4. Attente 2 s (lidar prêt)
-#   5. Boucle principale à CONTROL_HZ
+"""Boucle principale de conduite CoVAPSy."""
 
-import time
-import signal
-import sys
-import threading
-import csv
-import config
-from lidar_thread import Lidar360
-from lidar_consumer import LidarConsumer
-from actuators import Actuators
-from ftg import compute_ftg, detect_collision
+from __future__ import annotations  # annotations différées pour le typage
 
-sonar_module = None
+import csv  # journal de roulage
+import signal  # arrêt propre sur SIGINT/SIGTERM
+import threading  # thread sonar
+import time  # horodatage et temporisation
+from typing import Iterable, Optional  # types des helpers
+
+import config  # paramètres actifs du runtime
+from actuators import Actuators  # servo + ESC + recul bloquant
+from lidar_consumer import LidarConsumer  # lecture non bloquante du scan
+from lidar_thread import Lidar360  # thread d'acquisition lidar
+from navigation import calculer_direction, calculer_vitesse, get_lateral_means  # navigation pure active
+
+sonar_module = None  # import conditionnel du sonar arrière
 if getattr(config, "SONAR_ACTIF", False):
     import sonar as sonar_module
 
 
-def main():
-    # ── Création et démarrage des composants ──────────────────────────
-    lidar    = Lidar360(config.PORT, config.BAUDRATE)
-    consumer = LidarConsumer(lidar)
-    act      = Actuators()
+def _iter_front_indices(half_angle_deg: int) -> Iterable[int]:
+    """Indices du secteur frontal avec rebouclage 360°."""
+    for idx in range(360 - half_angle_deg, 360):  # partie gauche du secteur frontal
+        yield idx  # indices 360-N ... 359
+    for idx in range(0, half_angle_deg + 1):  # partie droite du secteur frontal
+        yield idx  # indices 0 ... N
 
-    stop_event = threading.Event()
-    lidar.start()
+
+def _min_valid_distance(scan: list[int], indices: Iterable[int]) -> Optional[int]:
+    """Distance minimale > 0 sur une liste d'indices."""
+    minimum = None  # aucune mesure valide trouvée au départ
+    for idx in indices:  # parcours des indices utiles
+        dist = scan[idx]  # distance lidar brute en mm
+        if dist > 0 and (minimum is None or dist < minimum):
+            minimum = dist  # conserve la plus petite distance valide
+    return minimum  # None si tout est à 0
+
+
+def _compute_front_min(scan: Optional[list[int]], half_angle_deg: Optional[int] = None) -> Optional[int]:
+    """Distance minimale dans le secteur frontal."""
+    if scan is None:
+        return None  # pas de scan disponible
+    if half_angle_deg is None:
+        half_angle_deg = config.FRONT_SECTOR_HALF  # demi-angle frontal par défaut
+    return _min_valid_distance(scan, _iter_front_indices(int(half_angle_deg)))  # min devant
+
+
+def _write_log(
+    log_writer: csv.writer,
+    log_file,
+    moyenne_gauche: Optional[float],
+    moyenne_droite: Optional[float],
+    fresh: bool,
+    ticks_sans_scan: int,
+    front_min: Optional[int],
+    angle: float,
+    vitesse: float,
+):
+    """Écrit une ligne CSV et force le flush."""
+    log_writer.writerow(
+        [
+            round(time.monotonic(), 3),  # temps monotonic
+            round(moyenne_gauche, 3) if moyenne_gauche is not None else -1,  # moyenne latérale gauche
+            round(moyenne_droite, 3) if moyenne_droite is not None else -1,  # moyenne latérale droite
+            round(angle, 3),  # angle commandé
+            round(vitesse, 3),  # vitesse commandée
+            front_min if front_min is not None else -1,  # -1 si avant vide
+            int(fresh),  # 1 si le scan de ce tick est frais
+            ticks_sans_scan,  # ticks depuis le dernier scan frais
+        ]
+    )
+    log_file.flush()  # écrit immédiatement sur disque
+
+
+def main():
+    """Point d'entrée runtime."""
+    lidar = Lidar360(config.PORT, config.BAUDRATE)  # thread lidar
+    consumer = LidarConsumer(lidar)  # consommateur non bloquant
+    act = Actuators()  # sorties servo/ESC
+    stop_event = threading.Event()  # arrêt demandé
+
+    lidar.start()  # démarrage acquisition
 
     if sonar_module:
-        t_sonar = threading.Thread(
-            target=sonar_module.sonar_thread_func,
-            args=(stop_event,),
-            daemon=True
-        )
-        t_sonar.start()
+        threading.Thread(
+            target=sonar_module.sonar_thread_func,  # boucle sonar arrière
+            args=(stop_event,),  # partage du stop_event
+            daemon=True,  # ne bloque pas la sortie
+        ).start()  # lancement du thread sonar
 
-    # ── Gestionnaire de signal propre ─────────────────────────────────
-    # SIGINT  = Ctrl+C depuis le terminal.
-    # SIGTERM = kill depuis un autre process (ex: systemd, script de supervision).
-    # Les deux doivent couper proprement les PWM et le lidar pour éviter
-    # que le moteur reste alimenté ou que le servo reste braqué.
     def shutdown(signum, frame):
-        stop_event.set()
+        stop_event.set()  # demande d'arrêt propre
 
-    signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)  # Ctrl+C
+    signal.signal(signal.SIGTERM, shutdown)  # arrêt externe
 
-    # ── try/finally global ─────────────────────────────────────────────
-    # Garantit l'arrêt propre des actuateurs et du lidar quoi qu'il arrive
-    # (Ctrl+C, signal, exception). Le signal handler reste en place pour
-    # un arrêt immédiat, le finally couvre les cas restants.
+    log_file = None  # défini avant le try pour le finally
     try:
-        # Initialisation du log CSV — ouvert ici pour que le finally puisse
-        # toujours appeler log_file.close(), même si une exception survient
-        # pendant le time.sleep(2) qui suit.
-        log_file = open("run_log.csv", "w", newline="")
-        log_writer = csv.writer(log_file)
-        log_writer.writerow(["t", "front_min", "angle", "vitesse", "etat", "stuck"])
+        log_file = open("run_log.csv", "w", newline="")  # log simple par tick
+        log_writer = csv.writer(log_file)  # writer CSV
+        log_writer.writerow(
+            ["t", "moyenne_gauche", "moyenne_droite", "angle", "vitesse", "front_min", "fresh", "ticks_sans_scan"]
+        )  # en-tête CSV
 
-        # ── Attente démarrage lidar ─────────────────────────────────────
-        # Le lidar met ~1 s à démarrer le moteur et produire des scans valides.
-        # On attend 2 s par sécurité pour ne pas démarrer la conduite sur des
-        # scans vides ou incomplets.
-        time.sleep(2)
+        time.sleep(2.0)  # laisse le lidar publier ses premiers scans
         print("Lidar démarré, début de la conduite.")
 
-        # ── Boucle principale ───────────────────────────────────────────
-        etat = "AVANCE"
-        ticks_sans_scan = 0
-        # Compteur de blocage : incrémenté quand la voiture semble coincée.
-        stuck_count = 0
-        stuck_av_zero = 0
-        # Après un recul, phase avant forcée avec braquage escape_angle.
-        escape_ticks = 0
-        escape_angle = 0.0
-        # Après la phase avant, cooldown pour ne pas re-déclencher stuck.
-        escape_cooldown = 0
+        stuck_count = 0  # compteur actif uniquement si STUCK_RECOVERY_ACTIVE
+        cooldown = 0  # immunité post-recul
+        ticks_sans_scan = 0  # fail-safe lidar
+        last_scan = None  # dernier scan exploitable
+        angle_commande = 0.0  # angle loggé
+        vitesse_commandee = 0.0  # vitesse loggée
+        lidar_timeout_reported = False  # évite de spammer le message de sécurité
 
         while not stop_event.is_set():
-            t0 = time.monotonic()
-            angle = 0.0
-            vitesse = 0.0
+            t0 = time.monotonic()  # début du tick courant
+            fresh, _sid, _age, fresh_scan, _rate = consumer.poll()  # lecture du dernier scan
 
-            # ── Fail-safe perte lidar ───────────────────────────────────
-            # Lecture non-bloquante du dernier scan disponible.
-            fresh, sid, age, scan, rate = consumer.poll()
-
-            if not fresh:
-                ticks_sans_scan += 1
-                # Seuil atteint : couper propulsion et recentrer le servo.
-                # Le warning n'est affiché qu'une seule fois (== 15, pas >= 15)
-                # pour ne pas inonder le terminal.
-                if ticks_sans_scan == 15:
-                    act.set_vitesse(0)
-                    act.set_direction(0)
-                    print("[SECURITE] Lidar périmé, arrêt propulsion.")
+            if fresh and fresh_scan is not None:
+                last_scan = fresh_scan  # mémorise le dernier scan frais
+                ticks_sans_scan = 0  # reset du fail-safe
+                lidar_timeout_reported = False  # un scan frais réarme le message de sécurité
             else:
-                ticks_sans_scan = 0
+                ticks_sans_scan += 1  # scan frais manquant
 
-            # Décrémenter les ticks d'échappement indépendamment du lidar
-            if escape_ticks > 0:
-                escape_ticks -= 1
+            scan = last_scan if config.LIDAR_REUSE_LAST_SCAN else fresh_scan  # stratégie de repli
+            lidar_perime = scan is None or ticks_sans_scan >= config.LIDAR_TIMEOUT_TICKS  # plus de scan fiable
+            front_min = _compute_front_min(scan)  # min utile devant, y compris sur scan mémorisé
+            moyenne_gauche, moyenne_droite = get_lateral_means(scan)  # métriques de réglage terrain
 
-            if fresh and scan is not None:
+            angle_commande = 0.0  # valeur par défaut de sécurité
+            vitesse_commandee = 0.0  # valeur par défaut de sécurité
 
-                # Distance frontale minimale (secteur ±COLLISION_SECTOR_DEG).
-                front_min = None
-                for i in list(range(0, config.COLLISION_SECTOR_DEG + 1)) + \
-                         list(range(360 - config.COLLISION_SECTOR_DEG, 360)):
-                    d = scan[i]
-                    if d > 0 and (front_min is None or d < front_min):
-                        front_min = d
+            if lidar_perime:
+                act.set_vitesse(0.0)  # arrêt propulsion si lidar perdu
+                act.set_direction(0.0)  # roues droites en sécurité
+                if not lidar_timeout_reported:
+                    print("[SECURITE] Lidar périmé, arrêt propulsion.")
+                    lidar_timeout_reported = True
+            else:
+                recovery_triggered = False  # pas de recul sur ce tick par défaut
 
-                # Bug fix : si front_min=None (av=0, lidar ne mesure rien
-                # devant = trop proche), vérifier les murs latéraux via un secteur
-                # au lieu d'un simple point (plus robuste au bruit).
-                front_blocked = False
-                if front_min is None:
-                    left_sector = [scan[i] for i in range(85, 96) if scan[i] > 0]
-                    right_sector = [scan[i] for i in range(265, 276) if scan[i] > 0]
-
-                    left_d = min(left_sector) if left_sector else 100
-                    right_d = min(right_sector) if right_sector else 100
-
-                    if left_d < 1000 or right_d < 1000:
-                        front_blocked = True
-
-                # Détection d'état prolongé sans vision frontale utile
-                if front_blocked:
-                    stuck_av_zero += 1
-                else:
-                    stuck_av_zero = 0
-
-                # Check de collision critique pendant escape.
-                # On n'annule QUE si la distance frontale est CONFIRMÉE < cancel_dist.
-                # front_blocked (av=0) = distance inconnue mais < 200 mm datasheet :
-                # on ne sait pas si c'est 10 mm ou 190 mm → ne pas annuler,
-                # mais ne pas avancer non plus (voir ci-dessous).
-                cancel_dist = getattr(config, "ESCAPE_CANCEL_DIST_MM", 200)
-                if escape_ticks > 0 and (front_min is not None and front_min < cancel_dist):
-                    print(f"[SECURITE] Mur frontal ({front_min}mm) détecté pendant escape -> annulation escape.")
-                    escape_ticks = 0
-
-                # ── Phase avant forcée post-recul ─────────────────────
-                # Après le recul, on avance avec l'angle INVERSE pour se recentrer dans la piste
-                # sans refaire le même mur.
-                if escape_ticks > 0:
-                    escape_forward_angle = -escape_angle
-                    print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ESCAPE {escape_ticks} {escape_forward_angle:+.0f}°")
-                    act.set_direction(escape_forward_angle)
-                    if front_blocked:
-                        # Secteur avant aveugle (< 200 mm) : on braque mais on n'avance pas.
-                        # Les ticks se décomptent quand même → sortie propre de l'escape.
-                        act.set_vitesse(0.0)
+                if config.STUCK_RECOVERY_ACTIVE:
+                    if cooldown > 0:
+                        cooldown -= 1  # décrémente l'immunité post-recul
+                        stuck_count = 0  # pas de détection pendant le cooldown
                     else:
-                        act.set_vitesse(config.VITESSE_MIN)
-                else:
-                    angle = compute_ftg(scan, config.D_MIN_MM, config.W_MIN_PTS, config.K_FTG,
-                                        sector_deg=config.FTG_SECTOR_DEG,
-                                        steer_limit_deg=config.STEER_ANGLE_MAX_DEG)
-
-                    # Vitesse proportionnelle à la distance frontale.
-                    if front_blocked:
-                        vitesse = 0.0  # secteur avant entièrement aveugle (obstacles < 200 mm) → arrêt complet
-                        print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | BLOCKED v={vitesse:.2f}")
-                    else:
-                        # Vitesse adaptative expérimentale avec K_V si config.K_V est activé (> 0, différent de None)
-                        k_v = getattr(config, "K_V", None)
-                        if k_v is not None and k_v > 0.0:  # K_V > 0 : vitesse adaptative active — la logique COLLISION_DIST_MM ci-dessous est inactive tant que K_V > 0
-                            dist_vitesse = front_min if front_min is not None else 0
-                            v_calcule = k_v * (dist_vitesse / 1000.0)
-                            vitesse = min(config.VITESSE_MS, max(config.VITESSE_MIN, v_calcule))
-                            print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | K_V v={vitesse:.2f}")
+                        if front_min is not None and front_min < config.STUCK_DIST_MM:
+                            stuck_count += 1  # obstacle frontal persistant
                         else:
-                            # Logique originelle
-                            if front_min is not None and front_min < config.D_MIN_MM:
-                                ratio = max(0.0, (front_min - config.COLLISION_DIST_MM)) / \
-                                        (config.D_MIN_MM - config.COLLISION_DIST_MM)
-                                ratio = min(1.0, max(0.0, ratio))
-                                vitesse = config.VITESSE_MIN + (config.VITESSE_MS - config.VITESSE_MIN) * ratio
-                                print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ftg={angle:+.1f}° v={vitesse:.2f}")
-                            else:
-                                vitesse = config.VITESSE_MS
-                                print(f"av={scan[0]:4d} ga={scan[90]:4d} dr={scan[270]:4d} | ftg={angle:+.1f}°")
+                            stuck_count = max(0, stuck_count - 1)  # décrémentation douce
 
-                    act.set_direction(angle)
-                    act.set_vitesse(vitesse)
+                    if stuck_count >= config.STUCK_TICKS:
+                        print("[STUCK] Recul déclenché")
+                        act.set_vitesse(0.0)  # arrêt avant le recul
+                        angle_recul = act.reculer(scan=last_scan)  # recul bloquant avec choix d'angle
+                        print(f"[STUCK] Recul terminé, angle={angle_recul:+.1f}°")
+                        cooldown = config.STUCK_COOLDOWN_TICKS  # immunité post-recul
+                        stuck_count = 0  # reset du compteur
+                        recovery_triggered = True  # aucune commande AV sur ce tick
 
-                # ── Détection de blocage ──────────────────────────────
-                # Cooldown après recul pour ne pas re-déclencher immédiatement.
-                if escape_cooldown > 0:
-                    escape_cooldown -= 1
-                    stuck_count = 0
-                    stuck_av_zero = 0
-                elif front_min is not None and front_min < config.STUCK_DIST_MM:
-                    stuck_count += 1
-                else:
-                    stuck_count = max(0, stuck_count - 1)  # Décroissance douce (hystérésis)
+                if not recovery_triggered:
+                    angle_commande = calculer_direction(scan, config.NAV_K, config.NAV_EPS)  # direction active
+                    vitesse_commandee = calculer_vitesse(scan, front_min)  # vitesse active
+                    act.set_direction(angle_commande)  # applique le braquage
+                    act.set_vitesse(vitesse_commandee)  # applique la propulsion
 
-                if stuck_count >= config.STUCK_TICKS or stuck_av_zero >= config.STUCK_AV_ZERO_TICKS:
-                    # Choisir le côté le plus dégagé pour le braquage EN RECULANT.
-                    # On utilise à nouveau le min sur secteurs pour plus de robustesse.
-                    left_sector = [scan[i] for i in range(85, 96) if scan[i] > 0]
-                    right_sector = [scan[i] for i in range(265, 276) if scan[i] > 0]
-                    left_d = min(left_sector) if left_sector else 100
-                    right_d = min(right_sector) if right_sector else 100
+            _write_log(
+                log_writer,
+                log_file,
+                moyenne_gauche,
+                moyenne_droite,
+                fresh,
+                ticks_sans_scan,
+                front_min,
+                angle_commande,
+                vitesse_commandee,
+            )  # CSV
 
-                    if left_d > right_d:
-                        # Si l'obstacle est principalement à droite, pour se redresser lors d'un virage:
-                        # On braque vers l'obstacle (à droite) en reculant
-                        # pour éloigner l'avant du mur
-                        escape_angle = config.STEER_ANGLE_MAX_DEG
-                    else:
-                        escape_angle = -config.STEER_ANGLE_MAX_DEG
-
-                    print(f"[RECUL] Bloqué → recul {config.T_REVERSE_S}s braquage {escape_angle:+.0f}°")
-                    # Braquer AVANT de reculer → servo tourne pendant tout le recul.
-                    act.set_vitesse(0)
-                    act.reculer(config.T_REVERSE_S, force_angle_deg=escape_angle)
-
-                    # Phase avant forcée avec même braquage
-                    escape_ticks = config.ESCAPE_TICKS
-                    escape_cooldown = config.ESCAPE_COOLDOWN_TICKS
-                    stuck_count = 0
-                    stuck_av_zero = 0
-
-                # Ligne de log — etat est un label pour le CSV uniquement.
-                etat = "EVITE" if escape_ticks > 0 else "AVANCE"
-                current_angle = escape_angle if escape_ticks > 0 else angle
-                current_vitesse = config.VITESSE_MIN if escape_ticks > 0 else vitesse
-                log_writer.writerow([round(time.monotonic(), 3), front_min if front_min is not None else -1, round(current_angle, 1), round(current_vitesse, 3), etat, stuck_count])
-                log_file.flush()
-
-            # Régulation de fréquence : on calcule le temps restant avant le
-            # prochain tick pour maintenir CONTROL_HZ (50 Hz = 20 ms par tick).
-            # Si le traitement a pris plus que DT_S, on ne dort pas et on
-            # enchaîne immédiatement le tick suivant.
-            dt_ecoule = time.monotonic() - t0
-            dt_restant = config.DT_S - dt_ecoule
+            dt_ecoule = time.monotonic() - t0  # durée réelle du tick
+            dt_restant = config.DT_S - dt_ecoule  # régulation à 50 Hz
             if dt_restant > 0:
-                time.sleep(dt_restant)
+                time.sleep(dt_restant)  # attend le prochain tick
 
     finally:
-        stop_event.set()
-        act.stop()
-        lidar.stop()
-        try:
-            log_file.close()
-        except Exception:
-            pass
+        stop_event.set()  # demande l'arrêt aux threads
+        act.stop()  # coupe servo et ESC
+        lidar.stop()  # arrête le thread lidar
+        if log_file:
+            try:
+                log_file.close()  # ferme le CSV
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
-    main()
+    main()  # lancement direct en script

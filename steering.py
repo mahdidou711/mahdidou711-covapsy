@@ -1,45 +1,24 @@
-# ~/covapsy/steering.py
-# Module de conversion angle volant → duty cycle PWM servo.
-# Expose : clamp() (saturation générique) et angle_deg_to_duty() (conversion).
+"""Conversion angle -> duty cycle servo."""
 
-import config
+import config  # calibrations servo et bornes PWM
 
 
-# Saturation générique : renvoie x borné entre lo et hi.
 def clamp(x: float, lo: float, hi: float) -> float:
-    return lo if x < lo else hi if x > hi else x
+    return lo if x < lo else hi if x > hi else x  # saturation générique
 
 
 def angle_deg_to_duty(angle_deg: float) -> float:
-    """
-    Map angle_deg in [-STEER_ANGLE_MAX_DEG, +STEER_ANGLE_MAX_DEG] to duty in [SERVO_DUTY_MIN, SERVO_DUTY_MAX].
+    """Convertit un angle logique en PWM calibré."""
+    # Repli sûr si la calibration max manque.
+    amax = float(getattr(config, "STEER_ANGLE_MAX_DEG", 18.0))  # angle max du servo
+    angle_deg = clamp(angle_deg, -amax, amax)  # saturation avant interpolation
 
-    Valeurs calibrées :
-      centre = 7.85 %  (roues droites)
-      min    = 6.65 %  (butée gauche)
-      max    = 8.80 %  (butée droite)
-      débattement = ±18°
-    """
-    # getattr avec fallback 18.0 : protège contre un config incomplet lors des tests.
-    amax = float(getattr(config, "STEER_ANGLE_MAX_DEG", 18.0))
-    # On sature l'angle AVANT de normaliser pour garantir que x reste dans [-1, +1].
-    angle_deg = clamp(angle_deg, -amax, amax)
+    x = angle_deg / amax if amax > 0 else 0.0  # -1 gauche, 0 centre, +1 droite
 
-    # x = position normalisée du volant : -1 = butée gauche, 0 = centre, +1 = butée droite.
-    # Normalisation [-1, +1]
-    x = angle_deg / amax if amax > 0 else 0.0
-
-    # Interpolation asymétrique autour du centre :
-    # Le centre (7.85) n'est pas au milieu de [6.65, 8.80], donc la course
-    # gauche (1.20 %) et droite (0.95 %) sont interpolées séparément.
-    # x=+1 → 7.85 + 1×(8.80-7.85) = 8.80  (butée droite)
-    # x= 0 → 7.85                           (centre)
-    # x=-1 → 7.85 + (-1)×(7.85-6.65) = 6.65 (butée gauche)
+    # Interpolation asymétrique autour du centre calibré.
     if x >= 0:
-        duty = config.SERVO_DUTY_CENTER + x * (config.SERVO_DUTY_MAX - config.SERVO_DUTY_CENTER)
+        duty = config.SERVO_DUTY_CENTER + x * (config.SERVO_DUTY_MAX - config.SERVO_DUTY_CENTER)  # côté droite
     else:
-        duty = config.SERVO_DUTY_CENTER + x * (config.SERVO_DUTY_CENTER - config.SERVO_DUTY_MIN)
+        duty = config.SERVO_DUTY_CENTER + x * (config.SERVO_DUTY_CENTER - config.SERVO_DUTY_MIN)  # côté gauche
 
-    # Deuxième clamp de sécurité : empêche tout dépassement des limites
-    # physiques [5.0, 10.0] même si config contient des valeurs incohérentes.
-    return clamp(duty, config.DUTY_MIN_CLAMP, config.DUTY_MAX_CLAMP)
+    return clamp(duty, config.DUTY_MIN_CLAMP, config.DUTY_MAX_CLAMP)  # sécurité finale

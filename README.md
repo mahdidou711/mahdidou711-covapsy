@@ -1,11 +1,30 @@
 # CoVAPSy 2026
 
-![Python](https://img.shields.io/badge/language-Python-blue)
-![License](https://img.shields.io/github/license/mahdidou711/covapsy)
-![Last Commit](https://img.shields.io/github/last-commit/mahdidou711/covapsy)
-![Repo Size](https://img.shields.io/github/repo-size/mahdidou711/covapsy)
+![Python](https://img.shields.io/badge/language-Python%203-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-**Autonomous 1/10-scale RC car — ENS Paris-Saclay CoVAPSy 2026 competition**
+**Autonomous 1/10-scale RC car for the ENS Paris-Saclay CoVAPSy 2026 competition.**
+
+The runtime is modular, runs on a Raspberry Pi 4, and uses a RPLidar A2M12 for reactive navigation at 50 Hz. The active entry point is `main.py`.
+
+---
+
+## Table of contents
+
+1. [Hardware](#hardware)
+2. [State of the project](#state-of-the-project)
+3. [Architecture](#architecture)
+4. [File roles](#file-roles)
+5. [Driving logic](#driving-logic)
+6. [Key parameters](#key-parameters)
+7. [Execution flow](#execution-flow)
+8. [Dependencies and prerequisites](#dependencies-and-prerequisites)
+9. [Usage](#usage)
+10. [Safety and precautions](#safety-and-precautions)
+11. [Known limits](#known-limits)
+12. [Next steps](#next-steps)
+13. [Project tree](#project-tree)
+14. [License](#license)
 
 ---
 
@@ -13,113 +32,379 @@
 
 | Component | Model | Role |
 |---|---|---|
-| Single-board computer | Raspberry Pi 4 | Main compute + communications |
-| Lidar | RPLidar A2M12 | 360° distance sensing at 256000 baud |
-| ESC | Hobby-grade brushless ESC | Motor speed control (forward + reverse double-tap) |
-| Servo | Standard RC servo | Steering control (hardware PWM GPIO 12/13) |
-| Rear sonar | SRF10 | Obstacle detection during reverse (I2C bus 1, address 0x70) |
+| Single-board computer | Raspberry Pi 4 | Main compute, runs all threads |
+| Lidar | RPLidar A2M12 | 360-degree distance sensing, 256000 baud, `/dev/ttyUSB0` |
+| ESC | Hobby-grade brushless ESC | Forward and reverse via hardware PWM on GPIO 12 (channel 0) |
+| Servo | Standard RC servo | Steering via hardware PWM on GPIO 13 (channel 1) |
+| Rear sonar | SRF10 | Obstacle detection during reverse, I2C bus 1, address `0x70` |
 
-### Calibrated PWM values
+### Calibrated PWM values (`config.py`)
 
 | Signal | Parameter | Value |
 |---|---|---|
 | ESC neutral | `ESC_DUTY_NEUTRAL` | 7.78 % duty |
-| ESC forward start | `ESC_DUTY_FWD_START` | 7.88 % (above neutral) |
-| ESC reverse engage | `ESC_DUTY_REV_START` | 7.20 % |
-| ESC reverse stable | `ESC_DUTY_REV_STABLE` | 7.00 % (slow reverse) |
-| Servo center | `SERVO_DUTY_CENTER` | 7.85 % |
-| Servo left (MIN physical) | `SERVO_DUTY_MIN` | 6.65 % |
-| Servo right (MAX physical) | `SERVO_DUTY_MAX` | 8.80 % |
+| ESC forward start | `ESC_DUTY_FWD_START` | 7.88 % duty (neutral + `PROP_POINT_MORT_PWM`) |
+| ESC reverse engage | `ESC_DUTY_REV_START` | 7.20 % duty |
+| ESC reverse stable | `ESC_DUTY_REV_STABLE` | 7.00 % duty |
+| Servo center | `SERVO_DUTY_CENTER` | 8.00 % duty |
+| Servo left stop | `SERVO_DUTY_MIN` | 6.40 % duty |
+| Servo right stop | `SERVO_DUTY_MAX` | 9.60 % duty |
 
-### ESC notes
-- **Forward**: above neutral (7.88+) — below neutral is the braking/deadband zone
-- **Reverse**: requires a double-tap sequence (brake → neutral → brake → stable reverse)
-- Reverse is interrupted early if the rear sonar detects an obstacle
+Hardware PWM must be enabled in `/boot/config.txt`:
 
-### LiDAR frame convention
-- `scan[0]` = front, `scan[90]` = left, `scan[270]` = right
-- `0` = no measurement (below minimum range ~200 mm per datasheet) — treat as obstacle, NOT empty space
+```text
+dtoverlay=pwm-2chan,pin=12,func=4,pin2=13,func2=4
+```
 
 ---
 
-## Software Architecture
+## State of the project
+
+The project is **ready under conditions, not final**.
+
+- `main.py` is the real entry point.
+- `navigation.py` is the active navigation module.
+- FTG is no longer used in the runtime.
+- Reverse is intentionally blocking.
+- On-car physical validation is still required before the final cleanup.
+
+---
+
+## Architecture
+
+```text
+main.py
+  |-- LidarConsumer (lidar_consumer.py)
+  |     |-- Lidar360 (lidar_thread.py)          # acquisition thread, reconnect loop
+  |-- Actuators (actuators.py)
+  |     |-- HardwarePWM x2 (rpi_hardware_pwm)   # ESC (ch 0) + servo (ch 1)
+  |     |-- steering.py                          # angle_deg -> duty cycle
+  |     |-- sonar.py (optional)                 # rear SRF10 sonar during reverse
+  |-- navigation.py                              # pure computation: direction + speed
+  |-- config.py                                  # single source of truth for parameters
+  |-- sonar.py (optional thread)                # rear sonar continuous measurement
+```
+
+`navigation.py` is a pure computation module: no hardware access, no side effects. It takes a `scan` array and config parameters, and returns floats.
+
+---
+
+## File roles
 
 | File | Role |
 |---|---|
-| `main.py` | Entry point — main control loop, stuck detection, escape maneuver, CSV logging |
-| `ftg.py` | Follow-the-Gap algorithm — gap detection, best gap selection, angle output |
-| `config.py` | **Single source of truth** — all tuning parameters (speed, angles, lidar sectors) |
-| `actuators.py` | PWM control for motor (ESC) and steering servo, reverse double-tap sequence |
-| `sonar.py` | SRF10 rear ultrasonic sensor thread (I2C, context-manager reconnection) |
-| `lidar_thread.py` | RPLidar A2M12 acquisition thread (express mode, ~16K pts/s, auto-reconnect) |
-| `lidar_consumer.py` | Non-blocking scan buffer with freshness check and rate estimation |
-| `steering.py` | Asymmetric angle-to-duty-cycle conversion for servo |
-| `cal_servo.py` | Interactive servo calibration script |
-| `cal_esc_avant.py` | Interactive forward ESC calibration script |
-| `cal_esc_reverse.py` | Interactive reverse ESC calibration script |
-| `cal_lidar.py` | Lidar live display — verify angle convention and distance thresholds |
+| `main.py` | Entry point. 50 Hz control loop, lidar watchdog, stuck detection, CSV logging. |
+| `navigation.py` | Normalized steering law and exponential speed law. Pure computation. |
+| `config.py` | All tuning parameters. Single source of truth for the runtime. |
+| `actuators.py` | ESC and servo commands. Blocking reverse with ESC double-tap and sonar safety. |
+| `steering.py` | Asymmetric angle-to-duty conversion using calibrated servo endpoints. |
+| `lidar_thread.py` | RPLidar acquisition thread. Mirror transform to runtime convention. Reconnect loop. |
+| `lidar_consumer.py` | Non-blocking scan consumer. Freshness filtering. Scan rate estimation. |
+| `sonar.py` | SRF10 rear sonar thread and thread-safe read function. |
 
 ---
 
-## Algorithms
-### Follow-the-Gap (FTG)
+## Driving logic
 
-Reactive navigation at 50 Hz:
-1. Extract the forward lidar sector (`±FTG_SECTOR_DEG` around front)
-2. Threshold: points below `D_MIN_MM` are treated as obstacles (gap closed)
-3. Find contiguous free sequences of at least `W_MIN_PTS` points. Sequences separated by blindspots (0 distance values) of more than 3 indices are split (`GAP_MAX_IDX_JUMP`).
-4. Select the best gap: highest average depth; tie-break by gap width
-5. Steer toward the gap center with gain `K_FTG`, clamped to `±STEER_ANGLE_MAX_DEG`. If no gaps exist, fallback is dynamically steering towards the deepest measured single point.
-6. Speed proportionally reduced when `front_min < D_MIN_MM`, down to `VITESSE_MIN` at `COLLISION_DIST_MM`
+### Lidar convention
 
-### Stuck detection — two triggers
+The `Lidar360` thread applies a mirror transform at publication:
 
-**Trigger 1 — counter**: `front_min < STUCK_DIST_MM` for `STUCK_TICKS` consecutive ticks (6 = ~0.12 s at 50 Hz)
-
-**Trigger 2 — zero front**: all front sector measurements are 0 (too close to measure) AND at least one lateral wall < 1000 mm for `STUCK_AV_ZERO_TICKS` ticks (15 = ~0.3 s) — handles the case where the car is wedged so close to a wall that the lidar returns no front measurement
-
-### Reverse / Escape sequence
-
-```
-stuck detected
-  → choose open side: left_min vs right_min over sector [85–95°] / [265–275°]
-  → set steering toward obstacle side (Ackermann reverse turning to align rear to wall)
-  → reculer():
-      1. duty → REV_START  (brake,  REVERSE_ENGAGE_S)
-      2. duty → NEUTRAL    (reset,  REVERSE_ENGAGE_S)
-      3. duty → REV_START  (brake,  REVERSE_ENGAGE_S)   ← double-tap
-      4. duty → REV_STABLE for T_REVERSE_S (servo active during whole tap seq)
-         (interrupted early if rear sonar < SONAR_ARRIERE_SEUIL_CM -> currently 45 cm)
-      5. duty → NEUTRAL
-  → escape phase: drive forward with opposite steering for ESCAPE_TICKS ticks (40 = 0.8 s)
-     (interrupted early if front_min < STUCK_DIST_MM to prevent blind re-crashing)
-  → cooldown: ESCAPE_COOLDOWN_TICKS ticks (50 = 1.0 s) before stuck detection resumes
+```python
+idx = (-int(round(angle))) % 360
 ```
 
-### Telemetry
+Runtime convention throughout all modules:
+- `scan[0]` = front
+- `scan[90]` = left
+- `scan[270]` = right
+- `scan[i] == 0` means no valid measurement (not free space).
 
-Each run writes `run_log.csv` in the working directory at 50 Hz:
+### Direction (`navigation.py` — `calculer_direction`)
 
+Sectors used: `DIR_LEFT_SECTOR = (30, 60)`, `DIR_RIGHT_SECTOR = (300, 330)`.
+
+Each sector mean ignores zero values. If both sectors are invalid, the function returns `0.0`. If one sector is invalid, the other side is copied (neutralization).
+
+Steering formula:
+
+```text
+angle = NAV_K * (G_moy - D_moy) / (G_moy + D_moy + NAV_EPS)
 ```
-t, front_min, angle, vitesse, etat, stuck
+
+Result is clamped to `[-STEER_ANGLE_MAX_DEG, +STEER_ANGLE_MAX_DEG]` (±18°).
+
+The normalization by `(G_moy + D_moy + NAV_EPS)` makes the steering response independent of the absolute wall distance.
+
+### Speed (`navigation.py` — `calculer_vitesse`)
+
+Sectors used: `SPEED_LEFT_SECTOR = (35, 55)`, `SPEED_RIGHT_SECTOR = (305, 325)`.
+
+Lateral contrast ratio:
+
+```text
+r = |s_g - s_d| / (max(s_g, s_d) + SPEED_EPS)
 ```
 
-`etat` is `"AVANCE"` (normal FTG) or `"EVITE"` (escape phase active).
+Exponential speed law:
+
+```text
+v_lat = VITESSE_PLANCHER + (VITESSE_CROISIERE - VITESSE_PLANCHER) * exp(-SPEED_ALPHA * r)
+```
+
+- Straight line (r near 0): `v_lat` approaches `VITESSE_CROISIERE` (0.50 m/s).
+- Tight turn (r near 1): `v_lat` approaches `VITESSE_PLANCHER` (0.25 m/s).
+
+If both speed sectors are invalid, `v_lat = VITESSE_PLANCHER`.
+
+### Frontal term (`navigation.py` — `calculer_vitesse`)
+
+`main.py` computes `front_min` (minimum valid distance in the frontal sector, half-angle `FRONT_SECTOR_HALF = 10°`) and passes it to `calculer_vitesse`.
+
+```text
+f_front = min(1.0, front_min / FRONT_D_REF_MM)    if front_min is not None and > 0
+f_front = 1.0                                       otherwise
+
+v = clamp(v_lat * f_front, 0.0, VITESSE_CROISIERE)
+```
+
+`FRONT_D_REF_MM = 600 mm`. Below 600 mm in front, speed is progressively reduced.
+
+### Lidar watchdog (`main.py`)
+
+Each tick, `ticks_sans_scan` is incremented when no fresh scan is available. A scan is considered fresh if it is new (`scan_id` changed) and its age does not exceed `LIDAR_FRESH_MAX_S = 0.50 s`.
+
+If `scan is None` or `ticks_sans_scan >= LIDAR_TIMEOUT_TICKS` (15 ticks = 0.30 s at 50 Hz):
+- propulsion is set to 0.
+- steering is set to 0.
+- A single warning is printed.
+
+When `LIDAR_REUSE_LAST_SCAN = True`, the last valid scan is reused when no fresh scan is available, until the timeout fires.
+
+### Stuck detection and reverse (`main.py` + `actuators.py`)
+
+Controlled by `STUCK_RECOVERY_ACTIVE = True`.
+
+Detection counter logic (per tick):
+- If `cooldown > 0`: decrement cooldown, reset `stuck_count`.
+- Else if `front_min < STUCK_DIST_MM` (500 mm): increment `stuck_count`.
+- Else: `stuck_count = max(0, stuck_count - 1)`.
+
+Trigger: `stuck_count >= STUCK_TICKS` (6 consecutive ticks ≈ 0.12 s).
+
+On trigger:
+1. `set_vitesse(0.0)` — stop forward motion.
+2. `act.reculer(scan=last_scan)` — blocking reverse.
+3. `cooldown = STUCK_COOLDOWN_TICKS` (50 ticks = 1.0 s immunity).
+4. `stuck_count = 0`.
+
+### Blocking reverse (`actuators.py` — `reculer`)
+
+**Escape angle selection:**
+
+Lateral spaces are computed from `ESCAPE_LEFT_SECTOR = (20, 80)` and `ESCAPE_RIGHT_SECTOR = (280, 340)`, ignoring zero measurements.
+
+```text
+delta = right_space - left_space
+if abs(delta) >= ESCAPE_SYMMETRY_MM:
+    angle_deg = -sign(delta) * STEER_ANGLE_MAX_DEG
+else:
+    angle_deg = 0.0
+```
+
+A positive delta (more space on right) results in a negative angle (steer left), pivoting the front right during reverse. Small left/right differences below `ESCAPE_SYMMETRY_MM` keep the reverse straight.
+
+**Pivot guard:**
+
+Before sending any PWM:
+- `angle_deg < 0` (pivot left): if `left_space < ESCAPE_MIN_PIVOT_MM` (200 mm) → `angle_deg = 0.0`.
+- `angle_deg > 0` (pivot right): if `right_space < ESCAPE_MIN_PIVOT_MM` (200 mm) → `angle_deg = 0.0`.
+
+If `scan` is `None`, `left_space = right_space = 0.0`; with no lateral clearance information, the guard can force a straight reverse.
+
+**ESC double-tap sequence:**
+
+```text
+REV_START  →  sleep(REVERSE_TAP_S)   # 0.20 s
+NEUTRAL    →  sleep(REVERSE_TAP_S)   # 0.20 s
+REV_START  →  sleep(REVERSE_TAP_S)   # 0.20 s
+NEUTRAL    →  sleep(REVERSE_TAP_S)   # 0.20 s
+REV_STABLE →  loop until REVERSE_DUREE_S (1.0 s) or sonar stop
+NEUTRAL                               # final neutral
+```
+
+`set_direction(angle_deg)` is called after each ESC step to maintain the steering angle through the sequence.
+
+**Sonar safety during stable reverse:**
+
+If `SONAR_ACTIF = True` and the SRF10 reads `1 < dist < SONAR_ARRIERE_SEUIL_CM` (25 cm), the reverse loop exits early.
+
+### Servo conversion (`steering.py`)
+
+Asymmetric interpolation around the calibrated center:
+
+```text
+if angle >= 0:  duty = SERVO_DUTY_CENTER + (angle/STEER_ANGLE_MAX_DEG) * (SERVO_DUTY_MAX - SERVO_DUTY_CENTER)
+if angle < 0:   duty = SERVO_DUTY_CENTER + (angle/STEER_ANGLE_MAX_DEG) * (SERVO_DUTY_CENTER - SERVO_DUTY_MIN)
+```
+
+Sign convention in `actuators.set_direction`: the logical angle is inverted before conversion (`-angle_deg`) to compensate for the mechanical mounting direction.
 
 ---
 
-## Installation
+## Key parameters
+
+### Navigation — direction
+
+| Parameter | Value | Description |
+|---|---|---|
+| `NAV_K` | 18.0 | Steering gain |
+| `NAV_EPS` | 1.0 mm | Denominator guard (prevents division by zero) |
+| `DIR_LEFT_SECTOR` | (30, 60) | Left lateral sector for steering |
+| `DIR_RIGHT_SECTOR` | (300, 330) | Right lateral sector for steering |
+| `STEER_ANGLE_MAX_DEG` | 18.0° | Maximum steering angle |
+
+### Navigation — speed
+
+| Parameter | Value | Description |
+|---|---|---|
+| `VITESSE_CROISIERE` | 0.50 m/s | Cruise speed (straight line) |
+| `VITESSE_PLANCHER` | 0.25 m/s | Floor speed (tight turn) |
+| `VITESSE_MAX_MS` | 0.80 m/s | Absolute software speed cap |
+| `SPEED_ALPHA` | 3.0 | Exponential attenuation factor |
+| `SPEED_EPS` | 1.0 mm | Speed contrast denominator guard |
+| `SPEED_LEFT_SECTOR` | (35, 55) | Left lateral sector for speed law |
+| `SPEED_RIGHT_SECTOR` | (305, 325) | Right lateral sector for speed law |
+
+### Navigation — frontal term
+
+| Parameter | Value | Description |
+|---|---|---|
+| `FRONT_SECTOR_HALF` | 10° | Half-angle of the front sector |
+| `FRONT_D_REF_MM` | 600 mm | Reference distance for speed reduction |
+
+### Lidar
+
+| Parameter | Value | Description |
+|---|---|---|
+| `PORT` | `/dev/ttyUSB0` | Serial port |
+| `BAUDRATE` | 256000 | Serial baud rate |
+| `LIDAR_FRESH_MAX_S` | 0.50 s | Max scan age before considered stale |
+| `LIDAR_TIMEOUT_TICKS` | 15 ticks | Ticks without fresh scan before emergency stop |
+| `LIDAR_REUSE_LAST_SCAN` | True | Reuse last valid scan when no fresh scan |
+
+### Stuck detection
+
+| Parameter | Value | Description |
+|---|---|---|
+| `STUCK_DIST_MM` | 500 mm | Front distance threshold for stuck counter increment |
+| `STUCK_TICKS` | 6 ticks | Consecutive ticks before reverse trigger |
+| `STUCK_COOLDOWN_TICKS` | 50 ticks | Post-reverse immunity ticks |
+| `STUCK_RECOVERY_ACTIVE` | True | Enables stuck detection and reverse |
+
+### Reverse
+
+| Parameter | Value | Description |
+|---|---|---|
+| `REVERSE_TAP_S` | 0.20 s | Duration of each ESC double-tap step |
+| `REVERSE_DUREE_S` | 1.0 s | Maximum stable reverse duration |
+| `ESCAPE_LEFT_SECTOR` | (20, 80) | Left sector for escape angle selection |
+| `ESCAPE_RIGHT_SECTOR` | (280, 340) | Right sector for escape angle selection |
+| `ESCAPE_MIN_PIVOT_MM` | 200 mm | Minimum lateral clearance to allow a pivot |
+| `ESCAPE_SYMMETRY_MM` | 100 mm | Minimum left/right difference before choosing a side |
+
+### Sonar
+
+| Parameter | Value | Description |
+|---|---|---|
+| `SONAR_ACTIF` | True | Enable rear sonar (set to False if hardware absent) |
+| `SONAR_ARRIERE_SEUIL_CM` | 25 cm | Rear obstacle distance that stops reverse early |
+
+### Control loop
+
+| Parameter | Value | Description |
+|---|---|---|
+| `CONTROL_HZ` | 50 Hz | Loop frequency |
+| `DT_S` | 0.02 s | Loop period |
+
+---
+
+## Execution flow
+
+```text
+main()
+  │
+  ├─ Lidar360.start()              # acquisition thread starts
+  ├─ sonar_thread (optional)       # SRF10 measurement thread starts
+  │
+  └─ control loop at 50 Hz:
+       │
+       ├─ consumer.poll()          # read latest scan (freshness-filtered)
+       │     fresh? → update last_scan, reset ticks_sans_scan
+       │     stale? → increment ticks_sans_scan
+       │
+       ├─ select scan:
+       │     LIDAR_REUSE_LAST_SCAN → use last_scan if no fresh scan
+       │
+       ├─ _compute_front_min(scan) # min valid distance in ±FRONT_SECTOR_HALF
+       ├─ get_lateral_means(scan)  # (g, d) for CSV log
+       │
+       ├─ if lidar_perime:
+       │     set_vitesse(0) + set_direction(0) + warning
+       │
+       └─ else:
+             if STUCK_RECOVERY_ACTIVE:
+               update cooldown / stuck_count
+               if stuck_count >= STUCK_TICKS:
+                 set_vitesse(0)
+                 act.reculer(scan=last_scan)   ← blocking, up to ~1.8 s worst case
+                 cooldown = STUCK_COOLDOWN_TICKS
+             │
+             if not recovery_triggered:
+               angle = calculer_direction(scan, NAV_K, NAV_EPS)
+               vitesse = calculer_vitesse(scan, front_min)
+               act.set_direction(angle)
+               act.set_vitesse(vitesse)
+             │
+             _write_log(...)        # CSV flush at each tick
+```
+
+On `SIGINT` or `SIGTERM`:
+1. `stop_event.set()`
+2. `act.stop()` — ESC neutral + servo center + PWM channels stopped.
+3. `lidar.stop()` — thread join (timeout 3.0 s).
+4. CSV file closed.
+
+---
+
+## Dependencies and prerequisites
+
+### Python packages (`requirements.txt`)
+
+```text
+rplidar-roboticia
+rpi_hardware_pwm
+smbus2
+```
+
+Install:
 
 ```bash
-git clone https://github.com/mahdidou711/covapsy.git
-cd covapsy
 pip install -r requirements.txt
 ```
 
-> **Note**: must run on a Raspberry Pi 4 with the RPLidar connected on `/dev/ttyUSB0` and hardware PWM enabled on GPIO 12 and GPIO 13.
+### System prerequisites
+
+- Raspberry Pi 4 running a Linux distribution with Python 3.
+- Hardware PWM enabled on GPIO 12 and 13.
+- RPLidar A2M12 connected on `/dev/ttyUSB0`.
+- I2C enabled (for SRF10 sonar if `SONAR_ACTIF = True`).
+- User in the `dialout` group for serial port access.
+- User in the `i2c` group for I2C access.
 
 Enable hardware PWM in `/boot/config.txt`:
-```
+
+```text
 dtoverlay=pwm-2chan,pin=12,func=4,pin2=13,func2=4
 ```
 
@@ -128,123 +413,86 @@ dtoverlay=pwm-2chan,pin=12,func=4,pin2=13,func2=4
 ## Usage
 
 ### Run the car
+
 ```bash
 python3 main.py
 ```
 
-Stop: `Ctrl+C` or `kill` — cleanly stops PWM, centers servo, and stops LiDAR motor.
+Stop cleanly with `Ctrl+C` or `kill <pid>`. The shutdown handler cuts propulsion and servo before exiting.
 
-### Deployment from dev machine
-```bash
-# Quick (tuning only)
-scp config.py main.py actuators.py voituree3a6@192.168.123.97:~/covapsy/
+### CSV log
 
-# Full redeploy
-scp *.py voituree3a6@192.168.123.97:~/covapsy/
+`run_log.csv` is generated at runtime at 50 Hz in the working directory. It is an execution artifact, not a file that needs to appear in the repository tree.
+
+Columns:
+
+```text
+t, moyenne_gauche, moyenne_droite, angle, vitesse, front_min, fresh, ticks_sans_scan
 ```
 
-### Calibration (run once before first use)
-```bash
-python3 cal_servo.py        # find servo CENTER, MIN, MAX duty cycles
-python3 cal_esc_avant.py    # find ESC NEUTRAL and FWD_START duty cycles
-python3 cal_esc_reverse.py  # find REV_START and REV_STABLE duty cycles
-python3 cal_lidar.py        # verify angle mapping and distance thresholds live
-```
+| Column | Description |
+|---|---|
+| `t` | Monotonic timestamp (s) |
+| `moyenne_gauche` | Mean left lateral distance (mm), -1 if invalid |
+| `moyenne_droite` | Mean right lateral distance (mm), -1 if invalid |
+| `angle` | Commanded steering angle (deg) |
+| `vitesse` | Commanded speed (m/s) |
+| `front_min` | Minimum front distance (mm), -1 if invalid |
+| `fresh` | 1 if the scan used this tick was fresh |
+| `ticks_sans_scan` | Consecutive ticks without a fresh scan |
 
 ---
 
-## Configuration
+## Safety and precautions
 
-All tuning parameters are centralized in `config.py`. **This is the only file to edit on race day.**
-
-### Speed
-
-| Parameter | Default | Description |
-|---|---|---|
-| `VITESSE_MS` | 0.45 m/s | Target forward speed — start here, increase if stable |
-| `VITESSE_MIN` | 0.30 m/s | Minimum speed — ESC deadband floor |
-| `VITESSE_MAX_MS` | 2.0 m/s | Hard software cap — do not exceed |
-
-### FTG
-
-| Parameter | Default | Description |
-|---|---|---|
-| `D_MIN_MM` | 1500 mm | Safety bubble radius — increase = more conservative |
-| `W_MIN_PTS` | 20 points | Minimum width of a valid gap |
-| `K_FTG` | 1.6 | Steering gain — increase = more aggressive turns |
-| `FTG_SECTOR_DEG` | 150° | Half-angle of the forward lidar sector analysed by FTG |
-
-### Collision / Speed control
-
-| Parameter | Default | Description |
-|---|---|---|
-| `COLLISION_DIST_MM` | 900 mm | Distance at which speed starts reducing (must be < D_MIN_MM) |
-| `COLLISION_SECTOR_DEG` | 15° | Half-angle of the front detection sector |
-
-### Stuck detection & Reverse
-
-| Parameter | Default | Description |
-|---|---|---|
-| `STUCK_DIST_MM` | 400 mm | Front distance threshold to increment stuck counter (also interrupts escape phase to prevent crashing) |
-| `STUCK_TICKS` | 6 (~0.12 s) | Consecutive ticks below threshold to trigger reverse |
-| `STUCK_AV_ZERO_TICKS` | 15 (0.3 s) | Ticks with no front measurement + lateral walls close → stuck |
-| `T_REVERSE_S` | 1.0 s | Max reverse duration (can be cut short by rear sonar) |
-| `REVERSE_ENGAGE_S` | 0.10 s | Delay between steps of the double-tap sequence |
-| `ESCAPE_TICKS` | 40 (0.8 s) | Forward escape phase duration after reverse |
-| `ESCAPE_COOLDOWN_TICKS` | 50 (1.0 s) | Cooldown before stuck detection resumes after escape |
-
-### Sonar
-
-| Parameter | Default | Description |
-|---|---|---|
-| `SONAR_ACTIF` | True | Set to False if sonar is not connected |
-| `SONAR_ARRIERE_SEUIL_CM` | 20 cm | Rear obstacle distance that interrupts reverse early |
+- Do not run `main.py` without a working lidar: the watchdog will stop propulsion after `LIDAR_TIMEOUT_TICKS` ticks (0.30 s) if no fresh scan arrives.
+- Set `SONAR_ACTIF = False` in `config.py` if the SRF10 is physically absent; the import is conditional but the thread will fail without the hardware.
+- The blocking reverse (`actuators.reculer`) cannot be interrupted by `stop_event` once started. `SIGINT` will only take effect after the reverse completes.
+- `scan[i] == 0` is not free space; it means the lidar returned no measurement at that angle. All navigation functions ignore zero values explicitly.
+- Hardware PWM must be enabled and stable before running. An incorrect duty cycle can damage the ESC or servo.
+- Validate the steering sign physically before the first real run: `set_direction(+angle)` must turn the wheels to the right.
+- Validate the lidar convention physically: `scan[0]` must correspond to the physical front of the car.
 
 ---
 
-## Project Structure
+## Known limits
 
-```
+- A blocking reverse cannot be interrupted immediately once `act.reculer()` is called. Total blocking time can reach about `4 × REVERSE_TAP_S + REVERSE_DUREE_S`, so up to roughly 1.8 s in the current tuning if sonar does not stop it earlier.
+- If `scan` passed to `reculer()` is `None`, both lateral spaces fall back to `0.0` and the pivot guard can force a straight reverse.
+- The lidar convention (mirror transform in `lidar_thread.py`) must be validated on the physical car before trusting the sector indices.
+- The full steering sign chain (`navigation.py` → `actuators.set_direction` → `steering.angle_deg_to_duty`) must be validated on the physical car.
+
+---
+
+## Next steps
+
+- [ ] Validate the lidar convention (`scan[0]` = front) on the physical car.
+- [ ] Validate the full steering sign on the physical car.
+- [ ] Validate the ESC double-tap reverse sequence on the physical car.
+- [ ] Validate the sonar stop during reverse.
+- [ ] Tune `NAV_K`, `SPEED_ALPHA`, `FRONT_D_REF_MM` from on-car log data.
+
+---
+
+## Project tree
+
+```text
 covapsy/
-├── main.py               # Main control loop
-├── ftg.py                # Follow-the-Gap algorithm
-├── config.py             # All tuning parameters
-├── actuators.py          # Motor + servo PWM control
-├── sonar.py              # Rear SRF10 ultrasonic sensor
-├── lidar_thread.py       # Lidar acquisition (express mode)
-├── lidar_consumer.py     # Non-blocking scan buffer
-├── steering.py           # Servo angle conversion
-├── cal_servo.py          # Servo calibration
-├── cal_esc_avant.py      # Forward ESC calibration
-├── cal_esc_reverse.py    # Reverse ESC calibration
-├── cal_lidar.py          # Lidar calibration
-├── requirements.txt      # Python dependencies
-└── .github/
-    ├── workflows/
-    │   └── lint.yml      # CI: flake8 linting
-    └── ISSUE_TEMPLATE/   # Bug report template
+├── main.py                 # entry point, control loop
+├── navigation.py           # pure steering and speed computation
+├── config.py               # all tuning parameters
+├── actuators.py            # ESC + servo + blocking reverse
+├── steering.py             # angle-to-duty conversion
+├── lidar_thread.py         # acquisition thread
+├── lidar_consumer.py       # non-blocking scan consumer
+├── sonar.py                # SRF10 rear sonar thread
+├── requirements.txt
+├── README.md
+└── LICENSE
 ```
 
 ---
-
-## Roadmap
-
-- [ ] Verify LiDAR angle convention on hardware (`cal_lidar.py`)
-- [x] Fix servo drift during reverse double-tap (`actuators.py` — `set_direction()` between phases)
-- [x] Sync calibration scripts with config.py (`cal_servo.py`, `cal_esc_reverse.py`)
-- [x] Adaptive speed via K_V parameter (optional alternative to linear interpolation)
-- [ ] Multi-car avoidance / overtaking
-
----
-
-## Known issues
-
----
-
-## Author
-
-**mahdidou711** — ENS Paris-Saclay, CoVAPSy 2026
 
 ## License
 
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+MIT License — Copyright (c) 2026 mahdidou711. See [LICENSE](LICENSE) for details.
