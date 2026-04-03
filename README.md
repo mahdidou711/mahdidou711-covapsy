@@ -43,7 +43,7 @@ The runtime is modular, runs on a Raspberry Pi 4, and uses a RPLidar A2M12 for r
 | Signal | Parameter | Value |
 |---|---|---|
 | ESC neutral | `ESC_DUTY_NEUTRAL` | 7.78 % duty |
-| ESC forward start | `ESC_DUTY_FWD_START` | 7.88 % duty (neutral + `PROP_POINT_MORT_PWM`) |
+| ESC forward start | `ESC_DUTY_FWD_START` | 7.88 % duty (neutral + `ESC_FWD_DEADBAND`) |
 | ESC reverse engage | `ESC_DUTY_REV_START` | 7.20 % duty |
 | ESC reverse stable | `ESC_DUTY_REV_STABLE` | 7.00 % duty |
 | Servo center | `SERVO_DUTY_CENTER` | 8.00 % duty |
@@ -152,7 +152,7 @@ Exponential speed law:
 v_lat = VITESSE_PLANCHER + (VITESSE_CROISIERE - VITESSE_PLANCHER) * exp(-SPEED_ALPHA * r)
 ```
 
-- Straight line (r near 0): `v_lat` approaches `VITESSE_CROISIERE` (0.50 m/s).
+- Straight line (r near 0): `v_lat` approaches `VITESSE_CROISIERE` (0.30 m/s).
 - Tight turn (r near 1): `v_lat` approaches `VITESSE_PLANCHER` (0.25 m/s).
 
 If both speed sectors are invalid, `v_lat = VITESSE_PLANCHER`.
@@ -165,7 +165,9 @@ If both speed sectors are invalid, `v_lat = VITESSE_PLANCHER`.
 f_front = min(1.0, front_min / FRONT_D_REF_MM)    if front_min is not None and > 0
 f_front = 1.0                                       otherwise
 
-v = clamp(v_lat * f_front, 0.0, VITESSE_CROISIERE)
+v = v_lat * f_front
+v_min = VITESSE_PLANCHER * f_front    if f_front > 0 else 0.0
+v = clamp(v, v_min, VITESSE_CROISIERE)
 ```
 
 `FRONT_D_REF_MM = 600 mm`. Below 600 mm in front, speed is progressively reduced.
@@ -190,7 +192,7 @@ Detection counter logic (per tick):
 - Else if `front_min < STUCK_DIST_MM` (500 mm): increment `stuck_count`.
 - Else: `stuck_count = max(0, stuck_count - 1)`.
 
-Trigger: `stuck_count >= STUCK_TICKS` (6 consecutive ticks ≈ 0.12 s).
+Trigger: reverse starts when `stuck_count >= STUCK_TICKS` (threshold 6 ticks ≈ 0.12 s at 50 Hz).
 
 On trigger:
 1. `set_vitesse(0.0)` — stop forward motion.
@@ -258,7 +260,7 @@ Sign convention in `actuators.set_direction`: the logical angle is inverted befo
 
 | Parameter | Value | Description |
 |---|---|---|
-| `NAV_K` | 18.0 | Steering gain |
+| `NAV_K` | 12.0 | Steering gain |
 | `NAV_EPS` | 1.0 mm | Denominator guard (prevents division by zero) |
 | `DIR_LEFT_SECTOR` | (30, 60) | Left lateral sector for steering |
 | `DIR_RIGHT_SECTOR` | (300, 330) | Right lateral sector for steering |
@@ -268,10 +270,10 @@ Sign convention in `actuators.set_direction`: the logical angle is inverted befo
 
 | Parameter | Value | Description |
 |---|---|---|
-| `VITESSE_CROISIERE` | 0.50 m/s | Cruise speed (straight line) |
+| `VITESSE_CROISIERE` | 0.30 m/s | Cruise speed (straight line) |
 | `VITESSE_PLANCHER` | 0.25 m/s | Floor speed (tight turn) |
-| `VITESSE_MAX_MS` | 0.80 m/s | Absolute software speed cap |
-| `SPEED_ALPHA` | 3.0 | Exponential attenuation factor |
+| `ESC_SPEED_SCALE_MS` | 0.80 m/s | Absolute software speed cap |
+| `SPEED_ALPHA` | 2.0 | Exponential attenuation factor |
 | `SPEED_EPS` | 1.0 mm | Speed contrast denominator guard |
 | `SPEED_LEFT_SECTOR` | (35, 55) | Left lateral sector for speed law |
 | `SPEED_RIGHT_SECTOR` | (305, 325) | Right lateral sector for speed law |
@@ -298,7 +300,7 @@ Sign convention in `actuators.set_direction`: the logical angle is inverted befo
 | Parameter | Value | Description |
 |---|---|---|
 | `STUCK_DIST_MM` | 500 mm | Front distance threshold for stuck counter increment |
-| `STUCK_TICKS` | 6 ticks | Consecutive ticks before reverse trigger |
+| `STUCK_TICKS` | 6 ticks | Stuck counter threshold before reverse trigger |
 | `STUCK_COOLDOWN_TICKS` | 50 ticks | Post-reverse immunity ticks |
 | `STUCK_RECOVERY_ACTIVE` | True | Enables stuck detection and reverse |
 
@@ -385,6 +387,7 @@ On `SIGINT` or `SIGTERM`:
 rplidar-roboticia
 rpi_hardware_pwm
 smbus2
+numpy
 ```
 
 Install:

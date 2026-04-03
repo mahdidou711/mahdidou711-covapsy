@@ -30,18 +30,18 @@ class Actuators:
 
     def _speed_ms_to_duty(self, ms: float) -> float:
         # Limite la vitesse demandée à la plage supportée par le mapping PWM.
-        ms = max(-config.VITESSE_MAX_MS, min(ms, config.VITESSE_MAX_MS))
+        ms = max(-config.ESC_SPEED_SCALE_MS, min(ms, config.ESC_SPEED_SCALE_MS))
         if ms == 0:
             # 0 m/s correspond au neutre ESC.
             dc = config.ESC_DUTY_NEUTRAL
         elif ms > 0:
             # En marche avant, on part du neutre puis on ajoute la zone morte et le delta utile.
-            delta = ms * config.PROP_DELTA_PWM_MAX / config.VITESSE_MAX_MS
-            dc = config.ESC_DUTY_NEUTRAL + config.PROP_POINT_MORT_PWM + delta
+            delta = ms * config.ESC_PWM_RANGE / config.ESC_SPEED_SCALE_MS
+            dc = config.ESC_DUTY_NEUTRAL + config.ESC_FWD_DEADBAND + delta
         else:
             # En marche arrière, on soustrait le même delta autour du neutre.
-            delta = abs(ms) * config.PROP_DELTA_PWM_MAX / config.VITESSE_MAX_MS
-            dc = config.ESC_DUTY_NEUTRAL - (config.PROP_POINT_MORT_PWM + delta)
+            delta = abs(ms) * config.ESC_PWM_RANGE / config.ESC_SPEED_SCALE_MS
+            dc = config.ESC_DUTY_NEUTRAL - (config.ESC_FWD_DEADBAND + delta)
         return clamp(dc, config.DUTY_MIN_CLAMP, config.DUTY_MAX_CLAMP)
 
     def set_vitesse(self, ms: float):

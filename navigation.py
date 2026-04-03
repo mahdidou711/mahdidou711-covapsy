@@ -101,7 +101,8 @@ def calculer_vitesse(scan: Optional[Sequence[float]], front_min: Optional[float]
         f_front = min(1.0, front_min / config.FRONT_D_REF_MM)
 
     v = v_lat * f_front
-    return _clamp(v, 0.0, config.VITESSE_CROISIERE)
+    v_min = config.VITESSE_PLANCHER * f_front if f_front > 0 else 0.0
+    return _clamp(v, v_min, config.VITESSE_CROISIERE)
 
 
 # ---------------------------------------------------------------------------

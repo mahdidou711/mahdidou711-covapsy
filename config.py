@@ -28,10 +28,10 @@ STEER_ANGLE_MAX_DEG = 18.0   # braquage physique max
 
 ESC_DUTY_NEUTRAL = 7.78      # neutre ESC calibré sur la voiture
 
-PROP_POINT_MORT_PWM = 0.10   # seuil mini avant (offset sur le neutre)
-PROP_DELTA_PWM_MAX  = 1.00   # delta PWM max propulsion
+ESC_FWD_DEADBAND = 0.10      # seuil mini avant (offset sur le neutre)
+ESC_PWM_RANGE    = 1.00      # delta PWM max propulsion
 
-ESC_DUTY_FWD_START = ESC_DUTY_NEUTRAL + PROP_POINT_MORT_PWM  # seuil mini de marche avant
+ESC_DUTY_FWD_START = ESC_DUTY_NEUTRAL + ESC_FWD_DEADBAND  # seuil mini de marche avant
 
 # -----------------------------------------------------------------------------
 # ESC arrière — valeurs calibrées
@@ -56,7 +56,7 @@ LIDAR_REUSE_LAST_SCAN = True  # réutilise le dernier scan frais en cas de timeo
 # Navigation — direction
 # -----------------------------------------------------------------------------
 
-NAV_K   = 18.0               # gain de direction (sans logarithme)
+NAV_K   = 12.0               # gain de direction (sans logarithme)
 NAV_EPS = 1.0                # seuil d'insensibilité latérale (mm)
 
 DIR_LEFT_SECTOR  = (30, 60)  # secteur latéral gauche  — scan[30..60]
@@ -69,11 +69,11 @@ DIR_RIGHT_SECTOR = (300, 330)  # secteur latéral droit  — scan[300..330]
 SPEED_LEFT_SECTOR  = (35, 55)   # secteur gauche pour la loi de vitesse
 SPEED_RIGHT_SECTOR = (305, 325)  # secteur droit  pour la loi de vitesse
 SPEED_EPS          = 1.0        # seuil d'insensibilité vitesse (mm)
-SPEED_ALPHA        = 3.0        # exposant de la loi de vitesse exponentielle
+SPEED_ALPHA        = 2.0        # exposant de la loi de vitesse exponentielle
 
-VITESSE_CROISIERE = 0.50        # vitesse de croisière active
+VITESSE_CROISIERE = 0.30        # vitesse de croisière active
 VITESSE_PLANCHER  = 0.25        # vitesse minimale en courbe serrée
-VITESSE_MAX_MS    = 0.80        # vitesse avant maximale (échelle utilisateur)
+ESC_SPEED_SCALE_MS = 0.80       # vitesse avant maximale (échelle utilisateur)
 
 # -----------------------------------------------------------------------------
 # Navigation — terme frontal
@@ -127,12 +127,14 @@ STUCK_RECOVERY_ACTIVE = True  # récupération de blocage active
 # -----------------------------------------------------------------------------
 
 # Vérifie que les bornes de vitesse restent cohérentes entre elles.
-if not (0.0 < VITESSE_PLANCHER < VITESSE_CROISIERE <= VITESSE_MAX_MS):
+if not (0.0 < VITESSE_PLANCHER < VITESSE_CROISIERE <= ESC_SPEED_SCALE_MS):
     raise ValueError(
         f"Incohérence vitesses : PLANCHER={VITESSE_PLANCHER} "
-        f"CROISIERE={VITESSE_CROISIERE} MAX={VITESSE_MAX_MS}"
+        f"CROISIERE={VITESSE_CROISIERE} MAX={ESC_SPEED_SCALE_MS}"
     )
 # Garde-fous simples sur les principaux paramètres de roulage.
+if not (1.0 <= NAV_K <= 30.0):
+    raise ValueError(f"NAV_K hors plage : {NAV_K}")
 if not (0.1 <= VITESSE_CROISIERE <= 0.8):
     raise ValueError(f"VITESSE_CROISIERE hors plage [0.1, 0.8] : {VITESSE_CROISIERE}")
 if not (0.5 <= SPEED_ALPHA <= 6.0):
@@ -143,6 +145,8 @@ if not (5 <= FRONT_SECTOR_HALF <= 45):
     raise ValueError(f"FRONT_SECTOR_HALF hors plage [5, 45] : {FRONT_SECTOR_HALF}")
 if not (50 <= ESCAPE_MIN_PIVOT_MM <= 600):
     raise ValueError(f"ESCAPE_MIN_PIVOT_MM hors plage [50, 600] : {ESCAPE_MIN_PIVOT_MM}")
+if not (0 <= ESCAPE_SYMMETRY_MM <= 500):
+    raise ValueError(f"ESCAPE_SYMMETRY_MM hors plage : {ESCAPE_SYMMETRY_MM}")
 if not (ESC_DUTY_REV_START < ESC_DUTY_NEUTRAL):
     raise ValueError(f"REV_START ({ESC_DUTY_REV_START}) doit être < NEUTRAL ({ESC_DUTY_NEUTRAL})")
 if CONTROL_HZ <= 0:
