@@ -56,7 +56,8 @@ LIDAR_REUSE_LAST_SCAN = True  # réutilise le dernier scan frais en cas de timeo
 # Navigation — direction
 # -----------------------------------------------------------------------------
 
-NAV_K   = 30.0               # gain de direction (sans logarithme)
+NAV_K   = 30.0               # gain proportionnel de direction
+NAV_KD  = 0.0                # gain dérivé de direction (amortissement zigzag)
 NAV_EPS = 1.0                # seuil d'insensibilité latérale (mm)
 
 DIR_LEFT_SECTOR  = (30, 60)  # secteur latéral gauche  — scan[30..60]
@@ -133,8 +134,10 @@ if not (0.0 < VITESSE_PLANCHER < VITESSE_CROISIERE <= ESC_SPEED_SCALE_MS):
         f"CROISIERE={VITESSE_CROISIERE} MAX={ESC_SPEED_SCALE_MS}"
     )
 # Garde-fous simples sur les principaux paramètres de roulage.
-if not (1.0 <= NAV_K <= 30.0):
+if not (1.0 <= NAV_K <= 50.0):
     raise ValueError(f"NAV_K hors plage : {NAV_K}")
+if not (0.0 <= NAV_KD <= 5.0):
+    raise ValueError(f"NAV_KD hors plage [0.0, 5.0] : {NAV_KD}")
 if not (0.1 <= VITESSE_CROISIERE <= 0.8):
     raise ValueError(f"VITESSE_CROISIERE hors plage [0.1, 0.8] : {VITESSE_CROISIERE}")
 if not (0.5 <= SPEED_ALPHA <= 6.0):

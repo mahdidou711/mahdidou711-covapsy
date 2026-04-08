@@ -34,20 +34,29 @@ def _sector_mean(scan: Sequence[float], bounds: Tuple[int, int]) -> Optional[flo
 # Direction
 # ---------------------------------------------------------------------------
 
-def calculer_direction(scan: Optional[Sequence[float]], k: float, eps: float) -> float:
-    """Angle de direction normalisé en degrés.
+def calculer_direction(
+    scan: Optional[Sequence[float]],
+    k: float,
+    eps: float,
+    kd: float = 0.0,
+    e_prev: float = 0.0,
+    dt: float = 0.020,
+) -> tuple:
+    """Angle de direction normalisé en degrés (correcteur PD).
 
-    Loi : angle = k * (G - D) / (G + D + eps), puis saturation.
-    Retourne 0.0 si les deux secteurs sont invalides.
+    Loi P : angle_P = k * (G - D) / (G + D + eps)
+    Loi D : angle_D = kd * (e(t) - e_prev) / dt
+    Retourne (angle, e_courant). e_courant doit être stocké par l'appelant.
+    Retourne (0.0, 0.0) si les deux secteurs sont invalides.
     """
     if scan is None:
-        return 0.0
+        return 0.0, e_prev
 
     g = _sector_mean(scan, config.DIR_LEFT_SECTOR)   # secteur gauche scan[30..60]
     d = _sector_mean(scan, config.DIR_RIGHT_SECTOR)  # secteur droit  scan[300..330]
 
     if g is None and d is None:
-        return 0.0  # aucun côté exploitable
+        return 0.0, e_prev  # aucun côté exploitable
 
     # Neutralisation si un seul côté est valide
     if g is None:
@@ -55,9 +64,10 @@ def calculer_direction(scan: Optional[Sequence[float]], k: float, eps: float) ->
     elif d is None:
         d = g
 
-    # Normalise l'écart latéral pour limiter l'effet de la distance absolue aux murs.
-    angle = k * (g - d) / (g + d + eps)
-    return _clamp(angle, -config.STEER_ANGLE_MAX_DEG, config.STEER_ANGLE_MAX_DEG)
+    # Erreur normalisée (terme P)
+    e = (g - d) / (g + d + eps)
+    angle = k * e + kd * (e - e_prev) / dt
+    return _clamp(angle, -config.STEER_ANGLE_MAX_DEG, config.STEER_ANGLE_MAX_DEG), e
 
 
 # ---------------------------------------------------------------------------

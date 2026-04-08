@@ -115,6 +115,7 @@ def main():
         ticks_sans_scan = 0  # fail-safe lidar
         last_scan = None  # dernier scan exploitable
         angle_commande = 0.0  # angle loggé
+        e_dir_prev = 0.0     # erreur de direction au tick précédent (terme D)
         vitesse_commandee = 0.0  # vitesse loggée
         lidar_timeout_reported = False  # évite de spammer le message de sécurité
 
@@ -139,8 +140,9 @@ def main():
             vitesse_commandee = 0.0  # valeur par défaut de sécurité
 
             if lidar_perime:
-                act.set_vitesse(0.0)  # arrêt propulsion si lidar perdu
+                act.set_vitesse(0.0)   # arrêt propulsion si lidar perdu
                 act.set_direction(0.0)  # roues droites en sécurité
+                e_dir_prev = 0.0       # reset dérivée : évite un spike au retour du lidar
                 if not lidar_timeout_reported:
                     print("[SECURITE] Lidar périmé, arrêt propulsion.")
                     lidar_timeout_reported = True
@@ -165,12 +167,16 @@ def main():
                         angle_recul = act.reculer(scan=last_scan)  # recul bloquant avec choix d'angle
                         print(f"[STUCK] Recul terminé, angle={angle_recul:+.1f}°")
                         cooldown = config.STUCK_COOLDOWN_TICKS  # immunité post-recul
-                        stuck_count = 0  # reset du compteur
+                        stuck_count = 0   # reset du compteur
+                        e_dir_prev = 0.0  # reset dérivée : évite un spike après le reverse
                         recovery_triggered = True  # aucune commande AV sur ce tick
 
                 if not recovery_triggered:
                     # N'envoie les commandes normales que si aucun reverse n'a été lancé sur ce tick.
-                    angle_commande = calculer_direction(scan, config.NAV_K, config.NAV_EPS)  # direction active
+                    angle_commande, e_dir_prev = calculer_direction(  # direction active (PD)
+                        scan, config.NAV_K, config.NAV_EPS,
+                        kd=config.NAV_KD, e_prev=e_dir_prev, dt=config.DT_S,
+                    )
                     vitesse_commandee = calculer_vitesse(scan, front_min)  # vitesse active
                     act.set_direction(angle_commande)  # applique le braquage
                     act.set_vitesse(vitesse_commandee)  # applique la propulsion
