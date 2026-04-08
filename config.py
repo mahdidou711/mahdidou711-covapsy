@@ -56,12 +56,15 @@ LIDAR_REUSE_LAST_SCAN = True  # réutilise le dernier scan frais en cas de timeo
 # Navigation — direction
 # -----------------------------------------------------------------------------
 
-NAV_K   = 30.0               # gain proportionnel de direction
-NAV_KD  = 0.0                # gain dérivé de direction (amortissement zigzag)
-NAV_EPS = 1.0                # seuil d'insensibilité latérale (mm)
+NAV_K      = 30.0              # gain proportionnel de direction
+NAV_KD     = 0.0               # gain dérivé de direction (amortissement zigzag)
+NAV_K_AHEAD = 0.0              # gain secteurs d'anticipation virage (désactivé par défaut)
+NAV_EPS    = 1.0               # seuil d'insensibilité latérale (mm)
 
-DIR_LEFT_SECTOR  = (30, 60)  # secteur latéral gauche  — scan[30..60]
-DIR_RIGHT_SECTOR = (300, 330)  # secteur latéral droit  — scan[300..330]
+DIR_LEFT_SECTOR   = (30, 60)    # secteur latéral gauche  — scan[30..60]
+DIR_RIGHT_SECTOR  = (300, 330)  # secteur latéral droit   — scan[300..330]
+AHEAD_LEFT_SECTOR  = (10, 25)   # secteur anticipation gauche — scan[10..25]
+AHEAD_RIGHT_SECTOR = (335, 350) # secteur anticipation droite — scan[335..350]
 
 # -----------------------------------------------------------------------------
 # Navigation — vitesse latérale
@@ -138,6 +141,8 @@ if not (1.0 <= NAV_K <= 50.0):
     raise ValueError(f"NAV_K hors plage : {NAV_K}")
 if not (0.0 <= NAV_KD <= 5.0):
     raise ValueError(f"NAV_KD hors plage [0.0, 5.0] : {NAV_KD}")
+if not (0.0 <= NAV_K_AHEAD <= 20.0):
+    raise ValueError(f"NAV_K_AHEAD hors plage [0.0, 20.0] : {NAV_K_AHEAD}")
 if not (0.1 <= VITESSE_CROISIERE <= 0.8):
     raise ValueError(f"VITESSE_CROISIERE hors plage [0.1, 0.8] : {VITESSE_CROISIERE}")
 if not (0.5 <= SPEED_ALPHA <= 6.0):

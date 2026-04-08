@@ -41,13 +41,15 @@ def calculer_direction(
     kd: float = 0.0,
     e_prev: float = 0.0,
     dt: float = 0.020,
+    k_ahead: float = 0.0,
 ) -> tuple:
-    """Angle de direction normalisé en degrés (correcteur PD).
+    """Angle de direction normalisé en degrés (correcteur PD + anticipation).
 
-    Loi P : angle_P = k * (G - D) / (G + D + eps)
-    Loi D : angle_D = kd * (e(t) - e_prev) / dt
+    Loi P   : k * (G_lat - D_lat) / (G_lat + D_lat + eps)
+    Loi D   : kd * (e(t) - e_prev) / dt
+    Anticipation : k_ahead * (G_ahead - D_ahead) / (G_ahead + D_ahead + eps)
     Retourne (angle, e_courant). e_courant doit être stocké par l'appelant.
-    Retourne (0.0, 0.0) si les deux secteurs sont invalides.
+    Retourne (0.0, 0.0) si les deux secteurs latéraux sont invalides.
     """
     if scan is None:
         return 0.0, e_prev
@@ -64,9 +66,24 @@ def calculer_direction(
     elif d is None:
         d = g
 
-    # Erreur normalisée (terme P)
+    # Terme P + D sur secteurs latéraux
     e = (g - d) / (g + d + eps)
     angle = k * e + kd * (e - e_prev) / dt
+
+    # Terme d'anticipation : secteurs plus proches de l'avant scan[10..25] / scan[335..350]
+    if k_ahead != 0.0:
+        g_ahead = _sector_mean(scan, config.AHEAD_LEFT_SECTOR)
+        d_ahead = _sector_mean(scan, config.AHEAD_RIGHT_SECTOR)
+        if g_ahead is None and d_ahead is None:
+            pass  # secteurs avant vides, on ignore
+        else:
+            if g_ahead is None:
+                g_ahead = d_ahead
+            elif d_ahead is None:
+                d_ahead = g_ahead
+            e_ahead = (g_ahead - d_ahead) / (g_ahead + d_ahead + eps)
+            angle += k_ahead * e_ahead
+
     return _clamp(angle, -config.STEER_ANGLE_MAX_DEG, config.STEER_ANGLE_MAX_DEG), e
 
 

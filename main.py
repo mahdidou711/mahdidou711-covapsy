@@ -173,9 +173,10 @@ def main():
 
                 if not recovery_triggered:
                     # N'envoie les commandes normales que si aucun reverse n'a été lancé sur ce tick.
-                    angle_commande, e_dir_prev = calculer_direction(  # direction active (PD)
+                    angle_commande, e_dir_prev = calculer_direction(  # direction active (PD + anticipation)
                         scan, config.NAV_K, config.NAV_EPS,
                         kd=config.NAV_KD, e_prev=e_dir_prev, dt=config.DT_S,
+                        k_ahead=config.NAV_K_AHEAD,
                     )
                     vitesse_commandee = calculer_vitesse(scan, front_min)  # vitesse active
                     act.set_direction(angle_commande)  # applique le braquage
