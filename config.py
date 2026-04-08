@@ -56,7 +56,7 @@ LIDAR_REUSE_LAST_SCAN = True  # réutilise le dernier scan frais en cas de timeo
 # Navigation — direction
 # -----------------------------------------------------------------------------
 
-NAV_K   = 12.0               # gain de direction (sans logarithme)
+NAV_K   = 30.0               # gain de direction (sans logarithme)
 NAV_EPS = 1.0                # seuil d'insensibilité latérale (mm)
 
 DIR_LEFT_SECTOR  = (30, 60)  # secteur latéral gauche  — scan[30..60]
@@ -69,7 +69,7 @@ DIR_RIGHT_SECTOR = (300, 330)  # secteur latéral droit  — scan[300..330]
 SPEED_LEFT_SECTOR  = (35, 55)   # secteur gauche pour la loi de vitesse
 SPEED_RIGHT_SECTOR = (305, 325)  # secteur droit  pour la loi de vitesse
 SPEED_EPS          = 1.0        # seuil d'insensibilité vitesse (mm)
-SPEED_ALPHA        = 2.0        # exposant de la loi de vitesse exponentielle
+SPEED_ALPHA        = 3.0        # exposant de la loi de vitesse exponentielle
 
 VITESSE_CROISIERE = 0.30        # vitesse de croisière active
 VITESSE_PLANCHER  = 0.25        # vitesse minimale en courbe serrée
@@ -100,7 +100,7 @@ STUCK_COOLDOWN_TICKS = 50    # ticks d'immunité post-recul
 
 # Séquence ESC double-tap
 REVERSE_TAP_S   = 0.20       # durée de chaque étape du double-tap
-REVERSE_DUREE_S = 1.0        # durée du recul stable après double-tap
+REVERSE_DUREE_S = 1.5        # durée du recul stable après double-tap
 
 # Secteurs et seuil pour choix de côté lors du recul
 ESCAPE_LEFT_SECTOR  = (20, 80)    # secteur gauche pour choix d'angle de recul
