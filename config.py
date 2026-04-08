@@ -64,7 +64,7 @@ NAV_EPS    = 1.0               # seuil d'insensibilité latérale (mm)
 DIR_LEFT_SECTOR   = (30, 60)    # secteur latéral gauche  — scan[30..60]
 DIR_RIGHT_SECTOR  = (300, 330)  # secteur latéral droit   — scan[300..330]
 AHEAD_LEFT_SECTOR  = (10, 25)   # secteur anticipation gauche — scan[10..25]
-AHEAD_RIGHT_SECTOR = (335, 350) # secteur anticipation droite — scan[335..350]
+AHEAD_RIGHT_SECTOR = (335, 350)  # secteur anticipation droite — scan[335..350]
 
 # -----------------------------------------------------------------------------
 # Navigation — vitesse latérale
