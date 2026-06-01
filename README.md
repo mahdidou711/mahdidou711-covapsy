@@ -1,5 +1,8 @@
 # CoVAPSy 2026
 
+[![Lint](https://github.com/mahdidou711/mahdidou711-covapsy/actions/workflows/lint.yml/badge.svg)](https://github.com/mahdidou711/mahdidou711-covapsy/actions/workflows/lint.yml)
+
+
 Autonomous 1/10-scale race car for the ENS Paris-Saclay CoVAPSy 2026 competition.
 Runtime: reactive Python control loop at 50 Hz on Raspberry Pi 4.
 
