@@ -57,8 +57,8 @@ LIDAR_REUSE_LAST_SCAN = True  # réutilise le dernier scan frais en cas de timeo
 # -----------------------------------------------------------------------------
 
 NAV_K      = 30.0              # gain proportionnel de direction
-NAV_KD     = 0.0               # gain dérivé de direction (amortissement zigzag)
-NAV_K_AHEAD = 0.0              # gain secteurs d'anticipation virage (désactivé par défaut)
+NAV_KD     = 0.5               # gain dérivé de direction (amortissement zigzag)
+NAV_K_AHEAD = 8.0              # gain secteurs d'anticipation virage (désactivé par défaut)
 NAV_EPS    = 1.0               # seuil d'insensibilité latérale (mm)
 
 DIR_LEFT_SECTOR   = (30, 60)    # secteur latéral gauche  — scan[30..60]
