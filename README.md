@@ -33,7 +33,6 @@ lidar_thread.py           Background thread — continuous 360° scan acquisitio
 lidar_consumer.py         Non-blocking scan polling with freshness tracking
 sonar.py                  SRF10 rear sonar thread + thread-safe accessor
 steering.py               Logical angle → servo duty cycle conversion
-test_direction_simple.py  Offline unit tests for direction law
 requirements.txt          Python dependencies
 ```
 
