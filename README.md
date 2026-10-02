@@ -3,8 +3,9 @@
 [![Lint](https://github.com/mahdidou711/mahdidou711-covapsy/actions/workflows/lint.yml/badge.svg)](https://github.com/mahdidou711/mahdidou711-covapsy/actions/workflows/lint.yml)
 
 
-Autonomous 1/10-scale race car for the ENS Paris-Saclay CoVAPSy 2026 competition.
-Runtime: reactive Python control loop at 50 Hz on Raspberry Pi 4.
+Autonomous 1/10-scale race car developed as a team project for the ENS Paris-Saclay CoVAPSy 2026 competition.
+Mehdi Bouama's individual contribution focused on the navigation and control software.
+Runtime: reactive Python control loop with a configured 50 Hz loop rate on Raspberry Pi 4.
 
 ---
 
@@ -25,7 +26,7 @@ All PWM signals run at 50 Hz. Duty cycle range: 5.0 – 10.0 %.
 ## Repository structure
 
 ```text
-main.py                   Control loop entry point (50 Hz)
+main.py                   Control loop entry point (configured 50 Hz loop rate)
 navigation.py             Pure direction and speed computation
 actuators.py              ESC + servo PWM driver, blocking reverse maneuver
 config.py                 All runtime parameters and validation
@@ -73,7 +74,7 @@ sudo python3 main.py
 
 ### Control loop (`main.py`)
 
-Runs at `CONTROL_HZ = 50 Hz` (`DT_S = 0.020 s` per tick).
+Runs at a configured rate of `CONTROL_HZ = 50 Hz` (`DT_S = 0.020 s` per tick).
 
 ```text
 ┌──────────────┐     get_latest_scan()     ┌──────────────────┐
