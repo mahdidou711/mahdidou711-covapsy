@@ -17,5 +17,5 @@ labels: bug
 
 ## Environnement
 - Piste :
-- Vitesse (`VITESSE_MS`) :
+- Vitesse (`VITESSE_CROISIERE`) :
 - Conditions (sol, éclairage) :

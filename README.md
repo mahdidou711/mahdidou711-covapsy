@@ -39,7 +39,7 @@ requirements.txt          Python dependencies
 
 Generated at runtime (not tracked):
 
-- `run_log_<timestamp>.csv` — per-tick telemetry written by `main.py`
+- `run_log.csv` — per-tick telemetry written by `main.py` (overwritten at each start)
 
 ---
 
@@ -119,10 +119,14 @@ The driver applies `idx = (-int(round(angle))) % 360` to remap from RPLidar nati
 Sectors: left `[30°–60°]`, right `[300°–330°]` (relative to forward axis).
 
 ```text
-angle = NAV_K * (G - D) / (G + D + NAV_EPS)
+e = (G - D) / (G + D + NAV_EPS)
+e_ahead = (G_ahead - D_ahead) / (G_ahead + D_ahead + NAV_EPS)
+angle = NAV_K * e + NAV_KD * (e - e_prev) / DT_S + NAV_K_AHEAD * e_ahead
 ```
 
 Clamped to `[-STEER_ANGLE_MAX_DEG, +STEER_ANGLE_MAX_DEG]` = `[-18°, +18°]`.
+`e_ahead` is zero when both anticipation sectors have no valid measurements; the active
+configuration uses `NAV_KD = 0.5` and `NAV_K_AHEAD = 8.0`.
 Zero measurements are excluded from sector means.
 If one sector is entirely invalid, the valid side is mirrored.
 If both sectors are invalid, output is `0.0`.
@@ -223,7 +227,7 @@ Sonar stops the reverse early if rear obstacle detected within `SONAR_ARRIERE_SE
 
 ## Telemetry
 
-`run_log_<timestamp>.csv` is written to the working directory each tick with immediate `flush()`.
+`run_log.csv` is written to the working directory, overwritten at each start, and flushed after each tick.
 
-Columns: `timestamp`, `g_mm`, `d_mm`, `fresh`, `ticks_sans_scan`, `front_mm`, `angle_deg`, `vitesse_ms`.
+Columns (file order): `t` (monotonic clock), `moyenne_gauche`, `moyenne_droite`, `angle`, `vitesse`, `front_min`, `fresh`, `ticks_sans_scan`.
 Missing values are filled with `-1`.
